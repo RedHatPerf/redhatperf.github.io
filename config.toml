@@ -1,0 +1,18 @@
+baseURL = 'http://example.org/'
+languageCode = 'en-us'
+title = 'Red Hat App Services Performance Team'
+theme = "hugo-theme-stack"
+
+[security]
+enableInlineShortcodes = false
+
+[security.exec]
+allow = ['^dart-sass-embedded$', '^go$', '^npx$', '^postcss$', "^asciidoctor$"]
+osEnv = ['(?i)^((HTTPS?|NO)_PROXY|PATH(EXT)?|APPDATA|TE?MP|TERM)$']
+
+[security.funcs]
+getenv = ['^HUGO_']
+
+[security.http]
+methods = ['(?i)GET|POST']
+urls = ['.*']
