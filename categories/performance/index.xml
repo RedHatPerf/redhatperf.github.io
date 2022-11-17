@@ -1,0 +1,1498 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>performance on Red Hat App Services Performance Team</title><link>http://example.org/categories/performance/</link><description>Recent content in performance on Red Hat App Services Performance Team</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Thu, 17 Nov 2022 00:00:00 +0000</lastBuildDate><atom:link href="http://example.org/categories/performance/index.xml" rel="self" type="application/rss+xml"/><item><title>Reactive CRUD Performance: A Case Study</title><link>http://example.org/post/reactive-crud-performance-a-case-study/</link><pubDate>Thu, 17 Nov 2022 00:00:00 +0000</pubDate><guid>http://example.org/post/reactive-crud-performance-a-case-study/</guid><description>&lt;img src="http://example.org/post/reactive-crud-performance-a-case-study/apples-to-oranges.png" alt="Featured image of post Reactive CRUD Performance: A Case Study" />&lt;div class="paragraph">
+&lt;p>We were recently approached for comment about the relative performance of Quarkus for a reactive CRUD workload. This is a good case study into performance test design and some of the considerations required and hurdles that need to be overcome. What methodology can we derive for ensuring that the test we are performing is indeed the test that we are expecting?&lt;/p>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_why_is_quarkus_600x_times_slower_than_insert_framework_here">&amp;#34;Why is Quarkus 600x times slower than &lt;code>{INSERT_FRAMEWORK_HERE}&lt;/code>?!?&amp;#34;&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>A recent report of bad result from Quarkus warranted some further investigation. On the face of it the results looked bad, really bad, for Quarkus.&lt;/p>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_tldr">tl;dr&lt;/h3>
+&lt;div class="paragraph">
+&lt;p>By correcting implementation errors in a benchmark test, and carefully designing the test environment to ensure that only the application is being stressed, Quarkus goes from handling &lt;strong>1.75 req/sec&lt;/strong> to nearly &lt;strong>26,000 req/sec&lt;/strong>. Each request queried and wrote to a mysql database, using the same load driver and hardware.&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_test_architecture">Test architecture&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>The test that was shared with us is a simple load test that updates a database via REST invocations;&lt;/p>
+&lt;/div>
+&lt;div class="imageblock">
+&lt;div class="content">
+&lt;img src="reactiveBenchmark.png" alt="reactiveBenchmark"/>
+&lt;/div>
+&lt;/div>
+&lt;div class="olist arabic">
+&lt;ol class="arabic">
+&lt;li>
+&lt;p>A load generator creates a continuous stream of HTTP POST requests to a REST api. In this case &lt;a href="https://github.com/wg/wrk">wrk&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>A Quarkus application process the request via &lt;a href="https://quarkus.io/guides/resteasy-reactive">RESTEasy Reactive&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>The Quarkus application queries and updates a MySQL database instance via &lt;a href="https://hibernate.org/reactive/">Hibernate Reactive&lt;/a>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>The source code for the test can be found here: &lt;a href="https://github.com/thiagohora/tutorials/tree/fix_jmeter_test" class="bare">https://github.com/thiagohora/tutorials/tree/fix_jmeter_test&lt;/a>&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>To learn more about creating Reactive Applications with Quarkus, please read the &lt;a href="https://quarkus.io/guides/getting-started-reactive">Getting Started With Reactive&lt;/a> guide&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_initial_results">Initial Results &lt;span class="image">&lt;img src="emoji-unhappy.png" alt="Unhappy" width="35" height="35"/>&lt;/span>&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>Initial results for Quarkus were not promising;&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">$ wrk -t2 -c10 -d1m -s ./post_zipcode.lua --timeout 2m -H &amp;#39;Host: localhost&amp;#39; http://localhost:8080
+Running 1m test @ http://localhost:8080
+2 threads and 10 connections
+Thread Stats Avg Stdev Max +/- Stdev
+Latency 6.26s 10.29s 30.03s 77.78%
+Req/Sec 72.55 97.66 270.00 81.82%
+105 requests in 1.00m, 20.69KB read
+Socket errors: connect 0, read 10, write 0, timeout 0
+Non-2xx or 3xx responses: 10
+Requests/sec: 1.75
+Transfer/sec: 352.77B&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>That was 105 requests in 60 seconds, with 10 errors. Only 95 requests had been successfully sent in 60 seconds, or &lt;strong>1.75 req/sec&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Running the comparison test on my machine;&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">$ wrk -t2 -c10 -d1m -s ./post_zipcode.lua --timeout 2m -H &amp;#39;Host: localhost&amp;#39; http://localhost:8080
+Running 1m test @ http://localhost:8080
+2 threads and 10 connections
+Thread Stats Avg Stdev Max +/- Stdev
+Latency 35.78ms 43.69ms 568.52ms 92.67%
+Req/Sec 171.93 113.83 777.00 80.61%
+20228 requests in 1.00m, 3.70MB read
+Requests/sec: 336.86
+Transfer/sec: 63.04KB&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Overall, the request rate that Quarkus could support was only &lt;strong>1.75 req/sec!!&lt;/strong> Ok, so it wasn’t &lt;strong>600&lt;/strong> times slower, but it was &lt;strong>192&lt;/strong> times slower on my machine.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>but…​ something was not correct, Quarkus was displaying the following exception in the service logs;&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code>2022-06-17 15:20:44,507 ERROR [org.hib.rea.errors] (vert.x-eventloop-thread-45) HR000057: Failed to execute statement [select zipcode0_.zip as zip1_0_0_, zipcode0_.city as city2_0_0_, zipcode0_.county as county3_0_0_, zipcode0_.state as state4_0_0_, zipcode0_.timezone as timezone5_0_0_, zipcode0_.type as type6_0_0_ from ZipCode zipcode0_ where zipcode0_.zip=?]: could not load an entity: [com.baeldung.quarkus_project.ZipCode#08231]: java.util.concurrent.CompletionException: io.vertx.core.impl.NoStackTraceThrowable: Timeout
+at java.base/java.util.concurrent.CompletableFuture.encodeThrowable(CompletableFuture.java:332)
+at java.base/java.util.concurrent.CompletableFuture.completeThrowable(CompletableFuture.java:347)
+at java.base/java.util.concurrent.CompletableFuture$UniApply.tryFire(CompletableFuture.java:636)
+at java.base/java.util.concurrent.CompletableFuture.postComplete(CompletableFuture.java:510)
+at java.base/java.util.concurrent.CompletableFuture.completeExceptionally(CompletableFuture.java:2162)
+at io.vertx.core.Future.lambda$toCompletionStage$2(Future.java:362)
+...
+at io.netty.channel.nio.NioEventLoop.run(NioEventLoop.java:503)
+at io.netty.util.concurrent.SingleThreadEventExecutor$4.run(SingleThreadEventExecutor.java:986)
+at io.netty.util.internal.ThreadExecutorMap$2.run(ThreadExecutorMap.java:74)
+at io.netty.util.concurrent.FastThreadLocalRunnable.run(FastThreadLocalRunnable.java:30)
+at java.base/java.lang.Thread.run(Thread.java:833)
+Caused by: io.vertx.core.impl.NoStackTraceThrowable: Timeout&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>An initial investigation showed that the number of open mysql connections during the test was very high: &lt;strong>96 open connections&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code>mysql&amp;gt; show status like &amp;#39;%onn%&amp;#39;;
++-----------------------------------------------+---------------------+
+| Variable_name | Value |
++-----------------------------------------------+---------------------+
+...
+| Max_used_connections | 96 |
+| Max_used_connections_time | 2022-06-17 14:20:07 |
+...
+| Threads_connected | 96 |
++-----------------------------------------------+---------------------+
+16 rows in set (0.01 sec)&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>And checking the number of inserts the application had managed to perform within 1minutes;&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code>mysql&amp;gt; select count(*) from ZipCode;
++----------+
+| count(*) |
++----------+
+| 95 |
++----------+
+1 row in set (0.00 sec)&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>There was obviously something wrong with the database connections! Each connection was committing only a single value to the database and no more progress was being made. The number of entries in the database tallied &lt;em>exactly&lt;/em> with the number of successful HTTP requests.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Reviewing the CPU time for the Quarkus process confirmed that no further work was being done after the initial 95 commits to the database, the application was deadlocked;&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">$ pidstat -p 869871 1
+Linux 5.17.11-200.fc35.x86_64 (localhost.localdomain) 17/06/22 _x86_64_ (32 CPU)
+15:32:41 UID PID %usr %system %guest %wait %CPU CPU Command
+15:32:42 1000 869871 0.00 0.00 0.00 0.00 0.00 22 java
+15:32:43 1000 869871 0.00 0.00 0.00 0.00 0.00 22 java
+15:32:44 1000 869871 0.00 0.00 0.00 0.00 0.00 22 java
+15:32:45 1000 869871 0.00 0.00 0.00 0.00 0.00 22 java
+15:32:46 1000 869871 0.00 0.00 0.00 0.00 0.00 22 java&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>&lt;strong>Is the application behaving as expected?&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>If the application is erroring, the results are not valid. Before continuing, investigate &lt;strong>why&lt;/strong> the errors are occurring and fix the application.&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_initial_inspection_of_code">Initial inspection of code&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>A quick review of the code revealed the deadlocking issue;&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-java" data-lang="java">@POST
+@Transactional
+public Uni&amp;lt;ZipCode&amp;gt; create(ZipCode zipCode) {
+return getById(zipCode.getZip())
+.onItem()
+.ifNull()
+.switchTo(createZipCode(zipCode))
+.onFailure(PersistenceException.class)
+.recoverWithUni(() -&amp;gt; getById(zipCode.getZip()));
+}&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Ah Ha! the endpoint is annotated with &lt;code>@Transactional&lt;/code>. The application is using Hibernate Reactive, so instead we need to use the &lt;code>@ReactiveTransactional&lt;/code> annotation. For further details, please read the &lt;a href="https://quarkus.io/guides/hibernate-reactive-panache#transactions">Simplified Hibernate Reactive with Panache&lt;/a> guide. This can be confusing, but conversations have started about how to clarify the difference requirements, warning users if there is an issue.&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_quarkus_application_fixed">Quarkus Application Fixed &lt;span class="image">&lt;img src="emoji-happy.png" alt="Happy" width="35" height="35"/>&lt;/span>&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-java" data-lang="java">@POST
+@ReactiveTransactional
+public Uni&amp;lt;ZipCode&amp;gt; create(ZipCode zipCode) {
+return getById(zipCode.getZip())
+.onItem()
+.ifNull()
+.switchTo(createZipCode(zipCode))
+.onFailure(PersistenceException.class)
+.recoverWithUni(() -&amp;gt; getById(zipCode.getZip()));
+}&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Let’s try again:&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">$ wrk -t2 -c10 -d1m -s ./post_zipcode.lua --timeout 2m -H &amp;#39;Host: localhost&amp;#39; http://localhost:8080
+Running 1m test @ http://localhost:8080
+2 threads and 10 connections
+Thread Stats Avg Stdev Max +/- Stdev
+Latency 30.06ms 33.67ms 351.38ms 87.66%
+Req/Sec 197.60 145.88 1.14k 82.24%
+23427 requests in 1.00m, 4.60MB read
+Socket errors: connect 0, read 3, write 0, timeout 0
+Non-2xx or 3xx responses: 3
+Requests/sec: 390.21
+Transfer/sec: 78.40KB&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>&lt;strong>390.21 req/sec!!&lt;/strong> that’s much better!!&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>With the test fixed, we can see a lot more data in the database table;&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">mysql&amp;gt; select count(*) from ZipCode;
++----------+
+| count(*) |
++----------+
+| 10362 |
++----------+
+1 row in set (0.00 sec)&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="admonitionblock note">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Note&lt;/div>
+&lt;/td>
+&lt;td class="content">
+The test has been designed to query the database if a ZipCode already exists, before attempting to insert a new ZipCode. There are a finite number of ZipCodes, so as the test progresses, the number of ZipCode entries will tend towards the maximum number of ZipCodes. The workload progresses from being write heavy to read heavy.
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_same_results">Same results &lt;span class="image">&lt;img src="emoji-unhappy.png" alt="Unhappy" width="35" height="35"/>&lt;/span>&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>but…​ my the hard disk on my machine was making a &lt;strong>lot&lt;/strong> of noise during the test! The Quarkus result of &lt;strong>390.21 req/sec&lt;/strong> is suspiciously similar to the comparison baseline of &lt;strong>336.86 req/sec&lt;/strong>, and…​&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">$ pidstat -p 873146 1
+...
+15:46:29 UID PID %usr %system %guest %wait %CPU CPU Command
+15:46:30 1000 873146 59.00 6.00 0.00 0.00 65.00 12 java
+15:46:31 1000 873146 57.00 4.00 0.00 0.00 61.00 12 java
+15:46:32 1000 873146 50.00 3.00 0.00 0.00 53.00 12 java
+15:46:33 1000 873146 27.00 5.00 0.00 0.00 32.00 12 java
+15:46:34 1000 873146 32.00 3.00 0.00 0.00 35.00 12 java
+15:46:35 1000 873146 50.00 4.00 0.00 0.00 54.00 12 java
+15:46:36 1000 873146 27.00 3.00 0.00 0.00 30.00 12 java
+15:46:37 1000 873146 27.00 4.00 0.00 0.00 31.00 12 java
+15:46:38 1000 873146 39.00 4.00 0.00 0.00 43.00 12 java
+15:46:39 1000 873146 48.00 2.00 0.00 0.00 50.00 12 java
+15:46:40 1000 873146 40.00 2.00 0.00 0.00 42.00 12 java
+15:46:41 1000 873146 28.00 5.00 0.00 0.00 33.00 12 java
+15:46:42 1000 873146 23.00 4.00 0.00 0.00 27.00 12 java&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>The application is using less than &lt;strong>0.5&lt;/strong> cores on a &lt;strong>32&lt;/strong> core machine…​ hmm!&lt;/p>
+&lt;/div>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>&lt;strong>Is the application the bottleneck?&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>If a &lt;strong>system component&lt;/strong> is the performance bottleneck (i.e. not the application under test), we are not actually stress testing the application.&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_move_to_a_faster_disk">Move to a faster Disk &lt;span class="image">&lt;img src="emoji-happy.png" alt="Happy" width="35" height="35"/>&lt;/span>&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>Let’s move the database files to a faster disk;&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">$ docker run -d --rm --name mysqldb --network=host -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=baeldung -v /home/user/mysqlData:/var/lib/mysql -d mysql:5.7.38 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>and re-run the test&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">$ wrk -t2 -c10 -d1m -s ./post_zipcode.lua --timeout 2m -H &amp;#39;Host: localhost&amp;#39; http://localhost:8080
+Running 1m test @ http://localhost:8080
+2 threads and 10 connections
+Thread Stats Avg Stdev Max +/- Stdev
+Latency 2.97ms 17.85ms 319.79ms 98.44%
+Req/Sec 12.99k 6.45k 18.88k 77.23%
+1538167 requests in 1.00m, 301.75MB read
+Socket errors: connect 0, read 4, write 0, timeout 0
+Non-2xx or 3xx responses: 4
+Requests/sec: 25599.85
+Transfer/sec: 5.02MB&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Sit back, Relax and Profit! &lt;strong>25,599.85 req/sec!&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>&lt;strong>Do not stop here!&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>While it is easy to claim we have resolved the issue, for comparisons, we still do not have a controlled environment to run tests!&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_system_bottleneck_still_exists">System bottleneck still exists &lt;span class="image">&lt;img src="emoji-unhappy.png" alt="Unhappy" width="35" height="35"/>&lt;/span>&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>the Quarkus process is now using 4.5 cores…​&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">]$ pidstat -p 884208 1
+Linux 5.17.11-200.fc35.x86_64 (localhost.localdomain) 17/06/22 _x86_64_ (32 CPU)
+16:12:50 UID PID %usr %system %guest %wait %CPU CPU Command
+16:12:51 1000 884208 294.00 175.00 0.00 0.00 469.00 26 java
+16:12:52 1000 884208 305.00 173.00 0.00 0.00 478.00 26 java
+16:12:53 1000 884208 304.00 173.00 0.00 0.00 477.00 26 java
+16:12:54 1000 884208 299.00 169.00 0.00 0.00 468.00 26 java
+16:12:55 1000 884208 296.00 173.00 0.00 0.00 469.00 26 java
+16:12:56 1000 884208 298.00 171.00 0.00 0.00 469.00 26 java
+16:12:57 1000 884208 308.00 175.00 0.00 0.00 483.00 26 java
+16:12:58 1000 884208 301.00 177.00 0.00 0.00 478.00 26 java
+16:12:59 1000 884208 305.00 166.00 0.00 0.00 471.00 26 java
+16:13:00 1000 884208 304.00 169.00 0.00 0.00 473.00 26 java
+16:13:01 1000 884208 307.00 172.00 0.00 0.00 479.00 26 java
+16:13:02 1000 884208 301.00 174.00 0.00 0.00 475.00 26 java&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>but…​ the system is &lt;strong>60%&lt;/strong> idle&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">$ vmstat 1
+procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----
+r b swpd free buff cache si so bi bo in cs us sy id wa st
+14 0 5254976 9665088 590824 4895220 0 0 0 0 50997 715648 25 16 59 0 0
+16 0 5254976 9667204 590824 4895220 0 0 0 1372 50995 710429 24 16 60 0 0
+15 0 5254976 9666244 590824 4895232 0 0 0 0 51544 707477 24 16 59 0 0
+11 0 5254976 9664892 590872 4895160 0 0 0 980 51178 700680 24 16 60 0 0
+14 0 5254976 9662968 590880 4895232 0 0 0 12 54800 710039 25 16 59 0 0&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>We still have a bottleneck outside of the application, most likely within mysql or we are still I/O bound!&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>At this point, we have a couple of options, we can either;&lt;/p>
+&lt;/div>
+&lt;div class="literalblock">
+&lt;div class="content">
+&lt;pre>A) tune MySQL/IO so that they are no longer the bottleneck&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>or&lt;/p>
+&lt;/div>
+&lt;div class="literalblock">
+&lt;div class="content">
+&lt;pre>B) constrain that application below the maximum, such that the rest of the system is operating within it&amp;#39;s limits&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>The easiest option is to simply constrain the application.&lt;/p>
+&lt;/div>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>&lt;strong>Choose your scaling methodology&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>We can either scale up or tune the system, or we can scale down the application to below the limits of the system.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Choosing to scale up the system, or constrain the application, is a decision dependent on the goals of the testing.&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_constrain_application">Constrain application &lt;span class="image">&lt;img src="emoji-happy.png" alt="Happy" width="35" height="35"/>&lt;/span>&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>We will remove the MySQL/System bottleneck by constraining the application to 4 cpu cores, therefore reducing the maximum load the application can drive to the database. We achieve this by running the application in docker;&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">$ docker build -f ./src/main/docker/Dockerfile.jvm -t quarkus-project:0.1-SNAPSHOT .
+...
+Successfully built 0cd0d50404ac
+Successfully tagged quarkus-project:0.1-SNAPSHOT
+$ docker run --network host --cpuset-cpus=0-3 quarkus-project:0.1-SNAPSHOT&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>and re-running the test;&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">$ wrk -t2 -c10 -d1m -s ./post_zipcode.lua --timeout 2m -H &amp;#39;Host: localhost&amp;#39; http://localhost:8080
+Running 1m test @ http://localhost:8080
+2 threads and 10 connections
+Thread Stats Avg Stdev Max +/- Stdev
+Latency 5.36ms 44.30ms 766.89ms 98.94%
+Req/Sec 9.50k 4.45k 15.37k 78.52%
+1121692 requests in 1.00m, 220.06MB read
+Socket errors: connect 0, read 1, write 0, timeout 0
+Non-2xx or 3xx responses: 1
+Requests/sec: 18667.87
+Transfer/sec: 3.66MB&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Ok, so we are not at Max Throughput, but we &lt;strong>have&lt;/strong> removed the system outside of the application as a bottleneck. &lt;strong>The bottleneck is NOW the application&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>&lt;strong>Create an environment where the comparisons are valid&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>By constraining the application, we are not running at absolute Max Throughput possible, &lt;em>but&lt;/em> we have created an environment that allows for comparisons between frameworks.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>With a constrained application environment, we will not be in the situation where one or more frameworks are sustaining throughput levels that are at the limit of the system.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>If any application &lt;em>is&lt;/em> at the system limit, the results are invalid.&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_all_network_traffic_is_not_equal">All network traffic is not equal! &lt;span class="image">&lt;img src="emoji-unhappy.png" alt="Unhappy" width="35" height="35"/>&lt;/span>&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>Further investigation showed that Quarkus is not running with TLS enabled between the application and database, so database network traffic is running un-encrypted. Let’s fix that;&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-properties" data-lang="properties">quarkus.datasource.reactive.url=${DB_URL:mysql://localhost:3306/baeldung?useSSL=false&amp;amp;tlsVersion=TLSv1.2}
+quarkus.datasource.reactive.max-size=95
+quarkus.datasource.reactive.mysql.ssl-mode=required
+#&amp;#34;don&amp;#39;t do this in prod, don&amp;#39;t do this @ home, don&amp;#39;t do this !&amp;#34;
+#required for this test as mysql cert is self-signed
+quarkus.datasource.reactive.trust-all=true&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>and re-run&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">$ wrk -t2 -c10 -d1m -s ./post_zipcode.lua --timeout 2m -H &amp;#39;Host: localhost&amp;#39; http://localhost:8080
+Running 1m test @ http://localhost:8080
+2 threads and 10 connections
+Thread Stats Avg Stdev Max +/- Stdev
+Latency 2.44ms 12.94ms 354.67ms 98.17%
+Req/Sec 7.55k 3.55k 11.94k 77.93%
+898541 requests in 1.00m, 176.26MB read
+Socket errors: connect 0, read 2, write 0, timeout 0
+Non-2xx or 3xx responses: 2
+Requests/sec: 14955.61
+Transfer/sec: 2.93MB&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>This provided us with a final, comparable throughput result of &lt;strong>14,955.61 req/sec&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>&lt;strong>For comparisons, we need to ensure that each framework is performing the same work&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;div class="imageblock">
+&lt;div class="content">
+&lt;img src="apples-to-oranges.png" alt="apples to oranges"/>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_results">Results &lt;span class="image">&lt;img src="emoji-happy.png" alt="Happy" width="35" height="35"/>&lt;/span>&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>Is Quarkus really 600x times slower than Framework X/Y/Z? &lt;strong>Of course not!&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>On my machine;&lt;/p>
+&lt;/div>
+&lt;div class="olist arabic">
+&lt;ol class="arabic">
+&lt;li>
+&lt;p>the initial result was &lt;strong>1.75 req/sec&lt;/strong>.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>fixing the application brought that up to &lt;strong>390.21 req/sec&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>fixing some of the system bottlenecks gave us &lt;strong>25,599.85 req/sec&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>constraining the application, so that a fairer comparison with other frameworks can be made resulted in &lt;strong>18,667.87 req/sec&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>and finally, enabling TLS encryption to the database gives a final result of &lt;strong>14,955.61 req/sec&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/div>
+&lt;div class="imageblock">
+&lt;div class="content">
+&lt;img src="results.png" alt="results"/>
+&lt;/div>
+&lt;/div>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+Run &lt;strong>5&lt;/strong> gives us our baseline for comparison, &lt;strong>14,955.61 req//sec&lt;/strong>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_where_does_that_leave_quarkus_compared_to_framework_xyz">Where does that leave Quarkus compared to Framework X/Y/Z?&lt;/h3>
+&lt;div class="paragraph">
+&lt;p>well…​ that is an exercise for the reader ;-)&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_summary">Summary&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>Does these results show that Quarkus is quick? Well kinda, they hint at it, but there are still issues with the methodology that need resolving.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>However, when faced with a benchmark result, especially one that does not appear to make sense, there are a number of steps you can take to validate the result;&lt;/p>
+&lt;/div>
+&lt;div class="ulist">
+&lt;ul>
+&lt;li>
+&lt;p>&lt;strong>Fix the application&lt;/strong>: Are there errors? Is the test functioning as expected? If there are errors, resolve them&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>Ensure the application is the bottleneck&lt;/strong>: What are the limiting factors for the test? Is the test CPU, Network I/O, Disk I/O bound?&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>Do not stop evaluating the test when you see a &lt;em>&amp;#34;good&amp;#34;&lt;/em> result&lt;/strong>. For comparisons, you need to ensure that &lt;em>every&lt;/em> framework is the limiting factor for performance and not the system.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>Chose how to constrain the application&lt;/strong>: either by scaling up the system, or scaling down the application.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>Validate that all frameworks are doing the same work&lt;/strong>. For comparisons, are the frameworks performing the same work?&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>Ensure al frameworks are providing the same level of security&lt;/strong>. Are the semantics the same? e.g. same TLS encoding? same db transaction isolation levels?&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;/div>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+The System Under Test includes the &lt;strong>System&lt;/strong>. Do not automatically &lt;em>assume&lt;/em> that your application is the bottleneck
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_notes_on_methodology">Notes on Methodology&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="admonitionblock caution">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Caution&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>&lt;strong>Does this benchmark tell us everything we need to know about how Quarkus behaves under load? Not really! It gives us &lt;em>one&lt;/em> data point&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>In order to have a meaningful understanding of behavior under load, the following issues with methodology needs to be addressed;&lt;/p>
+&lt;/div>
+&lt;div class="ulist">
+&lt;ul>
+&lt;li>
+&lt;p>Load generation, database and application are all running on a single machine. The current test does not stress any of the network stack and there are side effects due to co-location of services. The application topology needs to be representative of a production environment.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>This test does not measure application responsiveness from a &lt;em>users perspective&lt;/em>. A tool that does not suffer from &lt;a href="http://highscalability.com/blog/2015/10/5/your-load-generator-is-probably-lying-to-you-take-the-red-pi.html">coordinated omissions&lt;/a>, such as &lt;a href="https://hyperfoil.io/">Hyperfoil&lt;/a>, is required to accurately measure service response time, including system wait time. &lt;strong>throughput != response time&lt;/strong> and response time is what matters to users!&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>The mixture of read/writes to the database changes throughout the duration of the test. Initially the load is very write heavy, as time progresses, the database load is predominantly read heavy. A more consistent pattern of read/writes should be maintained throughout the test duration.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>The applications are not given time to correctly &amp;#34;warm up&amp;#34;, therefore the results are a mixture of Java code running in interpreted mode and compiled mode.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>Due to the issue above, it is not possible to derive how a framework would behave with real-world production traffic from this test&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>As with any benchmarking, it is always best to &lt;strong>test a simulation of your production traffic&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;/div></description></item><item><title>Coordinated Omission</title><link>http://example.org/post/coordinated-omission/</link><pubDate>Wed, 16 Nov 2022 00:00:00 +0000</pubDate><guid>http://example.org/post/coordinated-omission/</guid><description>&lt;img src="http://example.org/post/coordinated-omission/coordinated-omission-cumulative-wait-time.png" alt="Featured image of post Coordinated Omission" />&lt;div class="paragraph">
+&lt;p>Learn about Coordinated Omission, the root cause and its effects. After reading this post you should be able to answer questions such as &amp;#34;What is Coordinated Omission?&amp;#34;, &amp;#34;How does it effect benchmark results&amp;#34;, &amp;#34;How can we design a load test that does not suffer from coordinated omission&amp;#34; and &amp;#34;does my tool suffer from the coordinated omission problem?&amp;#34;&lt;/p>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_tldr">Tl;dr&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>Coordinated Omission occurs when the load generator we choose is not able to accurately create a workload representative of real world traffic whilst load testing a remote service.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>There is a &amp;#34;Coordination&amp;#34; from the System Under Test applying indirect back pressure to the load driver, that causes the load driver to &amp;#34;Omit&amp;#34; any number of valid results. The System Under Test can blocks the load generator, severely skewing it’s measurements.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Response time metrics measured with tools that suffer from Coordinated Omission are far from misleading, they are wrong. The worst part is, the load generator can not detect or inform users that the results are incorrect.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Using tools such as &lt;a href="https://hyperfoil.io/">Hyperfoil&lt;/a>, you can be sure that any response time metrics it captures are accurate; or, if it detects back-pressure from the System Under Test, it will record and report the unintended back-pressure.&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_tell_me_about_this_coordinated_omission_thingy">Tell me about this Coordinated Omission thingy!&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>&lt;em>Coordinated Omission&lt;/em> is a term that has been in circulation for a while now. There are many articles that describe; for more detailed explanations of coordinated omission, please take a look at &lt;a href="#_further_reading">Further Reading&lt;/a>.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Before exploring the nuances of coordinated omission, lets get clear in our minds what it is we are trying to do when we are measuring system &amp;#34;response time&amp;#34;.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Imagine a scenario where we run a call center for a building materials trade counter (&lt;strong>Building Star Trade Supplies Inc&lt;/strong>)&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Our tag line is &amp;#34;&lt;strong>&lt;em>Building Star Trade Supplies Inc: the best in the world for all your building supply needs!&lt;/em>&lt;/strong>&amp;#34;&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>To improve customer experience, we want to reduce the time it takes for our customers to place an order. The faster customers can place an order, the happier they are, and the faster we can build a world beating business!&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>What do we need to do; measure how long it takes to place a telephone order through our switchboard.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>If it takes longer than 1 minute to place an order we will start to loose market share to our rivals &lt;em>Prime Materials Supplies&lt;/em>.&lt;/p>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_a_typical_interaction">A typical interaction&lt;/h3>
+&lt;div class="imageblock right text-center">
+&lt;div class="content">
+&lt;img src="customer-interaction.png" alt="Interaction" width="400" height="400"/>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Typically a customer calls the call center, is put through to an operator, where the operator checks stock levels, raises a new order and confirms with the customer before terminating tha call.&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_how_long_does_it_take_to_place_an_order">How long does it take to place an order?&lt;/h3>
+&lt;div class="imageblock">
+&lt;div class="content">
+&lt;img src="coordinated-omission-placeOrder.png" alt="Order timeline"/>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>There are 2 main components in the time taken to place the order;&lt;/p>
+&lt;/div>
+&lt;div class="ulist">
+&lt;ul>
+&lt;li>
+&lt;p>the &lt;strong>&amp;#34;Wait Time&amp;#34;&lt;/strong> the customer was being held in the switchboard queue before being put through the operator&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>The &lt;strong>&amp;#34;Service Time&amp;#34;&lt;/strong> it took for the operator to process the customer request&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>From the customers point-of-view, the total &lt;strong>&amp;#34;Order Time&amp;#34;&lt;/strong> (i.e. the time taken to place the order) is ;&lt;/p>
+&lt;/div>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>&lt;strong>&amp;#34;Order Time&amp;#34; = &amp;#34;Wait Time&amp;#34; + &amp;#34;Service Time&amp;#34;&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>To measure the performance of our call center, we need to measure the total &amp;#34;Order Time&amp;#34;.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>&lt;strong>If it only takes a single operator 30 seconds to process an order request, but customers are waiting on average 30 minutes to be connected to them, the customer experience is poor&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_what_does_a_call_center_have_to_do_with_my_web_service">What does a call center have to do with my Web Service?!?&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>There are a lot of similarities between a call center and a Web Service.&lt;/p>
+&lt;/div>
+&lt;div class="admonitionblock note">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Note&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>Any number of &lt;em>customers&lt;/em> (&lt;strong>clients&lt;/strong>) can &lt;em>call&lt;/em> (&lt;strong>tcp_socket::open&lt;/strong>) our &lt;em>switchboard&lt;/em> (&lt;strong>web service&lt;/strong>), where an &lt;em>operator&lt;/em> (&lt;strong>thread&lt;/strong>) will process the &lt;em>enquiry&lt;/em> (&lt;strong>request&lt;/strong>), interacting with multiple &lt;em>systems&lt;/em> (&lt;strong>backend services&lt;/strong>) before confirming an &lt;em>order&lt;/em> (&lt;strong>response&lt;/strong>) and terminating the &lt;em>call&lt;/em> (&lt;strong>tcp_socket::close&lt;/strong>).&lt;/p>
+&lt;/div>
+&lt;div class="imageblock right text-center">
+&lt;div class="content">
+&lt;img src="terminology_equivalence.png" alt="Terminology Equivalence"/>
+&lt;/div>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Typically for us developers of web services; before we push our changes into production, we want to know how it will scale or perform under sustained client load. So, we build a benchmark, take some measurements and deploy depending on if we see acceptable performance.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>But &lt;strong>how&lt;/strong> do we measure performance of a web service? What decisions do we take, and how does this impact our confidence in how our web service performs.&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_measuring_system_performance">Measuring System performance&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>So, you’ve been tasked with ensuring the application can handle production workload. The checklist typically looks something like;&lt;/p>
+&lt;/div>
+&lt;div class="ulist checklist">
+&lt;ul class="checklist">
+&lt;li>
+&lt;p>✓ pick a load generation tool&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>✓ setup benchmarking environment&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>✓ run load generation tool against test environment&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>✓ ensure the system response times are within required SLA’s&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>❏ ship it!&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;/div>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>&lt;strong>The first step is crucial! : Picking a load generation tool that models reality is vital in shipping a product that behaves they way you expecct it to&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_modelling_the_real_world">Modelling the real world&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>Let’s go back to our &lt;strong>Building Star Trade Supplies Inc&lt;/strong>. In order to improve customer experience, we have built a brand new call center &lt;strong>BSTSI-callHandler-2.0&lt;/strong>!!&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>We have tested to make sure the call center works (&lt;strong>functional testing&lt;/strong>); but before we start taking customers calls there, we need to ensure that it is more efficient (&lt;strong>load testing&lt;/strong>) than &lt;strong>BSTSI-callHandler-0.1.BETA&lt;/strong>.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>For this work, we need to design a test that models the real world!&lt;/p>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_designing_the_load_test">Designing the &amp;#34;load&amp;#34; test&lt;/h3>
+&lt;div class="paragraph">
+&lt;p>Our SLA for our call center stipulates that we need to be able to;&lt;/p>
+&lt;/div>
+&lt;div class="ulist">
+&lt;ul>
+&lt;li>
+&lt;p>Process &lt;strong>20 orders per minute&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>Customers must spend &lt;strong>on average less than 1 minutes&lt;/strong> on the phone placing an order.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>99% of customers should be able to place an order within &lt;strong>2 minutes&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>So, lets bring in a number of dummy customers (&lt;strong>clients&lt;/strong>) that will ring the call center and place fictitious orders. We can measure how long it takes for each dummy customer to place and order.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>To meet the SLA, we need to be able to process &lt;strong>20 orders per minute&lt;/strong> (&lt;strong>throughput&lt;/strong>) with the average telephone call taking less than &lt;strong>1 minute&lt;/strong> (&lt;strong>mean response time&lt;/strong>).&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_first_attempt">First attempt&lt;/h3>
+&lt;div class="imageblock right text-center">
+&lt;div class="content">
+&lt;img src="firstTest.png" alt="First Test" width="400" height="400"/>
+&lt;/div>
+&lt;/div>
+&lt;div class="olist arabic">
+&lt;ol class="arabic">
+&lt;li>
+&lt;p>Each tester is given their own phone and a list of orders to place&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>The tester calls the new call center and places an order&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>After the call terminates, the tester checks the phone screen to see how long the call took&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>Call durations are logged for each order&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>After all the testers have run through their list of dummy orders. The call times for all the testers are collated&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>After reviewing the call logs, we found the average call duration was &lt;strong>36 seconds&lt;/strong>. This within our SLA limit of 1 minute, &lt;strong>SHIP IT!&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_ship_it">Ship It!!&lt;/h3>
+&lt;div class="imageblock right text-center">
+&lt;div class="content">
+&lt;img src="realworld.png" alt="Real World" width="400" height="400"/>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Fairly soon after opening &lt;strong>BSTSI-callHandler-2.0&lt;/strong>, negative reviews start appearing. Some people are frustrated that they can not quickly get through to place an order. And it is not just one person! there are a few disgruntled customers.&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_what_went_wrong">What went wrong?&lt;/h3>
+&lt;div class="paragraph">
+&lt;p>&lt;strong>Our test had some fundamental flaws&lt;/strong>. While everything appeared to provide us with the data to give us confidence about how the call center would perform, we were not quite modelling how calls would arrive &lt;strong>in the real world&lt;/strong>.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Each tester had been given their own phone and a list of orders to place. This puts some limits on the test;&lt;/p>
+&lt;/div>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="olist arabic">
+&lt;ol class="arabic">
+&lt;li>
+&lt;p>&lt;strong>Testers can only place one order at a time!&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>Testers are blocked&lt;/strong> from placing any more orders until their current order is placed.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>In the real world there are many more customers, &lt;strong>each with their own phone&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>In the real world, &lt;strong>customers enquiries arrive at different, random times, often in parallel&lt;/strong>.&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>In addition to to the test design problems above, in the real world there are &lt;strong>hiccups&lt;/strong>. For example, in our call center there are Lunch breaks, fire alarms, computer systems crash etc.&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_how_does_a_hiccup_effect_our_call_center_performance">How does a Hiccup effect our call center performance?&lt;/h3>
+&lt;div class="paragraph">
+&lt;p>We have our imaginary call center, now lets have an imaginary outage!&lt;/p>
+&lt;/div>
+&lt;div id="img-dilbert-token-ring" class="imageblock right text-center">
+&lt;div class="content">
+&lt;a class="image" href="https://dilbert.com/strip/1996-05-02">&lt;img src="dilbert_token_ring.gif" alt="Dilbert Token Ring"/>&lt;/a>
+&lt;/div>
+&lt;div class="title">Figure 1. &lt;a href="https://dilbert.com/strip/1996-05-02" class="bare">https://dilbert.com/strip/1996-05-02&lt;/a>&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Someone in the server room has rolled over a network cable and accidentally severed it, finding a new cable and wiring the server back into the switch takes 10 mins. All the backend systems were out for 10 minutes, tying up the operators until the backend systems come back online.&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_lets_do_some_math">Lets do some Math!&lt;/h3>
+&lt;div class="paragraph">
+&lt;p>Lets make some assumptions about our imaginary call center, with its imaginary outage;&lt;/p>
+&lt;/div>
+&lt;div class="ulist">
+&lt;ul>
+&lt;li>
+&lt;p>testers will make &lt;strong>1,000 new orders&lt;/strong>.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>we have &lt;strong>10 testers&lt;/strong>.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>the call center should be handling 20 calls per minutes (i.e. 2x 30s calls per tester). The &lt;strong>arrival rate is 20 calls per minute&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>the maximum call handle rate (max throughput) of the call center is 60 calls per minutes. I.e. the &lt;strong>maximum processing rate is 60 calls per minutes&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>any &lt;strong>backlog does not effect the service time&lt;/strong> (in reality this is not true, but brevity we will making this assumption)&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>our call center has a &lt;strong>10 minute hiccup&lt;/strong> in the middle of the test.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>all calls are processed, the &lt;strong>dropout rate is 0&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>each order takes a deterministic &lt;strong>30 seconds&lt;/strong> to complete. (&lt;strong>service time = 0.5min&lt;/strong>)&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>in the time before the outage, all calls are handled immediatley (&lt;strong>waiting time = 0min&lt;/strong>)&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>the queue is a First-In-First-Out (FIFO) queue&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>the queue is infinitely sized&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>What does this do the to summary statistics? A 10 minute Hiccup &lt;em>during our tests&lt;/em> would have been observed like this by the &lt;strong>testers&lt;/strong>;&lt;/p>
+&lt;/div>
+&lt;div class="imageblock">
+&lt;div class="content">
+&lt;img src="coordinated-omission-blocked-wait-time.png" alt="Blocked Wait Time"/>
+&lt;/div>
+&lt;/div>
+&lt;div class="admonitionblock note">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Note&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>The &lt;strong>Average Call Duration measured during Testing was 0.6 minutes (0min 36sec)&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Whereas, &lt;em>in reality&lt;/em>, a 10 minutes Hiccup will be observed like this by our &lt;strong>customers&lt;/strong>;&lt;/p>
+&lt;/div>
+&lt;div class="imageblock">
+&lt;div class="content">
+&lt;img src="coordinated-omission-cumulative-wait-time.png" alt="Cumulative Wait Time"/>
+&lt;/div>
+&lt;/div>
+&lt;div class="admonitionblock note">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Note&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>The &lt;strong>Average Call Duration experienced by customers was 1.9 minutes (1min 54s)&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>If you want to understand the math, please read &lt;a href="#_appendix_a_detailed_math">Appendix A: Detailed Math&lt;/a>&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_why_are_the_numbers_so_different">Why are the numbers so different?&lt;/h3>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>In our testing scenario, there were 10 testers who were blocked for 10 minutes. In reality users would &lt;strong>keep calling the telephone line&lt;/strong> and being put on hold until an operator became available.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>&lt;strong>Our test captured 10 Testers blocked for 10 minutes, but in reality 200 users would have been waiting for up to 10 minutes. We did not captured the waiting time of 200 of our users!&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Our flawed test showed the average order time of 36 seconds, but on average customers would have waited 1minute 54 seconds.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>&lt;strong>The MISSED waiting time was not included in the summary statistics!&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_second_attempt">Second Attempt&lt;/h3>
+&lt;div class="imageblock right text-center">
+&lt;div class="content">
+&lt;img src="secondTest.png" alt="Second Test" width="400" height="400"/>
+&lt;/div>
+&lt;/div>
+&lt;div class="olist arabic">
+&lt;ol class="arabic">
+&lt;li>
+&lt;p>Each tester is given &lt;strong>multiple phones&lt;/strong>, a list of orders to place &lt;strong>and the time to start the call&lt;/strong> and a &lt;strong>stopwatch&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>The tester(s) calls the call center to place orders, &lt;strong>at the time specified on their list&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>If the first call does not complete before the next order needs to be placed, the tester users a &lt;strong>different&lt;/strong> phone to make the next call. Any one tester can have multiple calls &lt;strong>running concurrently&lt;/strong> at the same time.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>After the call terminates, the tester checks the phone screen to see how the call took, and records this as the &amp;#34;Order Time&amp;#34;&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>After all the testers have run through their list of dummy orders. The call times for all the testers are collated and summary data is calculated.&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>If the tester runs out of phones, they start the stopwatch and stop the stopwatch again when one of their phones becomes available. After all of the orders have been placed, the stopwatch value is recorded the total &lt;strong>blocked time&lt;/strong> for each tester during the load test. &lt;strong>This is a direct measurement of Coordinated Omission.&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/div>
+&lt;div class="admonitionblock warning">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Warning&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>This time the average call time was 1 minute 20 seconds, above our SLA.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>We need to investigate why we are not meeting our SLA before rolling out &lt;strong>BSTSI-callHandler-2.0&lt;/strong> to our customers&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_what_is_different">What is different?&lt;/h3>
+&lt;div class="paragraph">
+&lt;p>Why is this a more accurate reflection of reality. A small number of testers are trying to mimic 1000 customer orders. In reality, we wouldn’t have 10 customers, each placing 100 orders in sequence. We are more likely to receive 1000 different customers, each placing one order. They would not arrive in sequence, but in parallel and at random times.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>In the first test, the testers could only make one call and made the calls in sequence. The maximum queue size was the number of testers. If there was a hiccup, they could not start a new call, but were blocked until they could end their current call. The wait time of any other customers trying to call the call center was missed.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>In the second test, the testers could use multiple phones to place calls in parallel. By have a list of pre determined times, we define how many new customers calls were arriving at the call center. We can record the total call time for each virtual customer, and if we run out of phones (&lt;strong>connections&lt;/strong>) to support the arrival rate, we record the blocked time.&lt;/p>
+&lt;/div>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>If there is &lt;strong>any&lt;/strong> blocked time recorded, the &lt;strong>results are invalid&lt;/strong>. It is invalid because we can no long queue any more customers, and record their wait time.&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_bringing_it_back_to_benchmark_design">Bringing it back to Benchmark Design&lt;/h2>
+&lt;div class="sectionbody">
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_what_can_be_done">What can be done?&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>A load generation tool that uses asynchronous I/O and uncouples threading from I/O, which measures timing independent on I/O is able to detect when the System Under Test is applying back-pressure to the load generator.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Tools such as &lt;a href="https://hyperfoil.io/">Hyperfoil&lt;/a> will detect &lt;strong>and report&lt;/strong> server back-pressure, so you &lt;strong>can&lt;/strong> be sure that the load generator is reporting accurate response times without any Coordinated Omission effects from the SUT.&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_how_i_tell_if_my_load_generation_tool_suffers_from_coordinated_omission">How I tell if my load generation tool suffers from Coordinated Omission?&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>Luckily there is a very simple test you can do! &lt;code>CTRL+Z&lt;/code>&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>While your benchmark is running, type &lt;code>CTRL+Z&lt;/code> to Stop your process&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">$ ./run_my_service.sh
+^Z
+[1]+ Stopped ./run_my_service.sh&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>After a period of time, start it again&lt;/p>
+&lt;/div>
+&lt;div class="listingblock">
+&lt;div class="content">
+&lt;pre class="highlight">&lt;code class="language-bash" data-lang="bash">$ fg 1
+./run_my_service.sh&lt;/code>&lt;/pre>
+&lt;/div>
+&lt;/div>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>If the load generator &lt;strong>only&lt;/strong> reports N number of requests, equivalent to the number of threads configured to generate load, taking the &lt;code>Stopped&lt;/code> period of time and no more threads experiencing delay then you have a problem&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_see_it_in_action">See it in action&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>We covered a demonstration of Coordinated Omission in &amp;#34;Quarkus Insights #22: Performance Testing: Tips and Pitfalls&amp;#34;&lt;/p>
+&lt;/div>
+&lt;div class="imageblock right text-center">
+&lt;div class="content">
+&lt;iframe width="560" height="315" src="https://www.youtube.com/embed/xdG8b9iDYbE?start=1500" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen="">&lt;/iframe>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_can_tune_away_this_problem">Can tune away this problem?&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="sect2">
+&lt;h3 id="_what_happens_if_i_increase_the_number_of_threads">What happens if I increase the number of threads?&lt;/h3>
+&lt;div class="paragraph">
+&lt;p>Unfortunately not, you &lt;strong>might&lt;/strong> be able to mitigate some of the issues through tuning, but you can &lt;strong>never be certain that the results are accurate&lt;/strong>. The fundamental problem is that there is &lt;strong>missing data&lt;/strong>, but you can not tell from the results if all the data has been captured.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Statements are often made such as &lt;em>&amp;#39;As with any Load Testing tool, if you don’t correctly size the number of threads, you will face the &amp;#34;Coordinated Omission&amp;#34; problem which can give you wrong or inaccurate results.&amp;#39;&lt;/em> (&lt;a href="https://jmeter.apache.org/usermanual/best-practices.html" class="bare">https://jmeter.apache.org/usermanual/best-practices.html&lt;/a>)&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>The fundamental issue is not with the &lt;em>size of the thread pool&lt;/em>, but whether the load generator threads that measure response time &lt;em>can be blocked by the System Under Test&lt;/em>.&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_cant_i_just_run_the_tests_for_longer">Can’t I just run the tests for longer?&lt;/h3>
+&lt;div class="paragraph">
+&lt;p>How many hiccups does your system have? How long do they last? Even if you can quantify those metrics, adjusting adding wait time to response times through a different data source is error prone. You might as well pick a load generation tool that handles coordinated omission and not have to normalize for a broken methodology.&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_my_application_does_not_stop_that_long_surely_this_is_effect_negligible">My application does not stop that long, surely this is effect negligible?&lt;/h3>
+&lt;div class="paragraph">
+&lt;p>I have personally witnessed applications under load fully paused for 2-3 seconds to perform GC, every 5-10 seconds. Unless your load generator can measure that wait time, &lt;strong>you will not know&lt;/strong> that the application was stalled. a load generator that suffers from co-rdinated omission has no way of measuring it&lt;/p>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_cant_i_just_look_at_the_summary_stats_to_tell_if_my_run_was_affected">Can’t I just look at the summary stats to tell if my run was affected?&lt;/h3>
+&lt;div class="paragraph">
+&lt;p>It is very difficult! The maximum values will be the same. The mean and centile response times look sensible. The only way to tell is if the requests sent are equal to expected number of requests to be sent during the time period. However, if you can not set an arrival rate, it is not possible to determine if the expected number of requests were sent.&lt;/p>
+&lt;/div>
+&lt;div class="admonitionblock important">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Important&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>&lt;strong>If the load generation tool does not decouple time measurement from generating load, the problem can not be tuned away.&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_summary">Summary&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>Coordinated Omission is the unintended back pressure a system under test can apply to a load generation tool, that prevents that tool for accurately recording user experience.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>&lt;strong>Response time&lt;/strong> = &lt;strong>wait time&lt;/strong> + &lt;strong>service time&lt;/strong>. A load generation tool that suffers from coordinated omission will only record &lt;strong>service time&lt;/strong> and will fail to record &lt;strong>wait time&lt;/strong>. Wait time &lt;strong>can be significant&lt;/strong> and therefore can have a huge effect on summary statistics.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>The worst part is, the load generator is unable to record the missed time, so users are completely unaware that there is a problem.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>In order to design response time tests (typically associated with SLA’s) we need to use tools that accurately record response time, including wait time. More importantly, our tools should &lt;strong>warn us if there is any unintended back-pressure from the System Under Test&lt;/strong>.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Choosing a tool such as &lt;a href="https://hyperfoil.io/">Hyperfoil&lt;/a> will not only provide you with accurate measurements, it will also warn you and fail the benchmark if it detects hiccups that have effected the accuracy of the results.&lt;/p>
+&lt;/div>
+&lt;hr/>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_further_reading">Further Reading&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="paragraph">
+&lt;p>For more information, please visit the following articles;&lt;/p>
+&lt;/div>
+&lt;div class="ulist">
+&lt;ul>
+&lt;li>
+&lt;p>&lt;a href="http://highscalability.com/blog/2015/10/5/your-load-generator-is-probably-lying-to-you-take-the-red-pi.html" class="bare">http://highscalability.com/blog/2015/10/5/your-load-generator-is-probably-lying-to-you-take-the-red-pi.html&lt;/a>&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;/div>
+&lt;hr/>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect1">
+&lt;h2 id="_appendix_a_detailed_math">Appendix A: Detailed Math&lt;/h2>
+&lt;div class="sectionbody">
+&lt;div class="sect2">
+&lt;h3 id="_in_our_test_scenario">In our test scenario&lt;/h3>
+&lt;div class="paragraph">
+&lt;p>we had &lt;strong>10 testers&lt;/strong> placing orders each placing an order. At 6 mins there was an outage, that &lt;strong>lasted 10 minutes&lt;/strong>.&lt;/p>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>Therefore, for 10 blocked orders;&lt;/p>
+&lt;/div>
+&lt;div class="ulist">
+&lt;ul>
+&lt;li>
+&lt;p>there was a &lt;strong>wait time of 10 minutes each&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>there was a &lt;strong>service time of 0.5 mins&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>total &lt;strong>order time was 10.5 minutes&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>For the remaining 990 orders;&lt;/p>
+&lt;/div>
+&lt;div class="ulist">
+&lt;ul>
+&lt;li>
+&lt;p>there was a &lt;strong>wait time of 0 minutes each&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>there was a &lt;strong>service time of 0.5 mins&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>total &lt;strong>order time was 0.5 minutes&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;/div>
+&lt;div class="imageblock right text-center">
+&lt;div class="content">
+&lt;img src="testAvOrderTime.png" alt="Test Average Order time"/>
+&lt;/div>
+&lt;/div>
+&lt;div class="admonitionblock note">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Note&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>The &lt;strong>Average Call Duration measured during Testing was 0.6 minutes&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;div class="sect2">
+&lt;h3 id="_in_the_real_world">In the Real World&lt;/h3>
+&lt;div class="paragraph">
+&lt;p>Things are a bit more complicated;&lt;/p>
+&lt;/div>
+&lt;div class="ulist">
+&lt;ul>
+&lt;li>
+&lt;p>new customers arrive at a rate of &lt;strong>20 per minute&lt;/strong>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>therefore, during the first minute of outage, 20 customers will be placed in the switchboard queue and will have to wait for &lt;strong>10 minutes&lt;/strong>, before the queue starts to empty&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>in the 2nd minute of the outage &lt;strong>another 20 customer&lt;/strong> arrive, are placed in the switchboard queue and will have to wait for &lt;strong>9 minutes&lt;/strong>, before the queue starts to empty&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>customers continue to arrive during the outage, filling up the switchboard queue&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>once the outage is resolved&lt;/strong> the operators can start to process the queue of customers. But there is a maximum number of customers they can process in one minutes (60 customers per minute &lt;strong>max throughput&lt;/strong>)&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>while the backlog is being processed at a rate of &lt;strong>60 customers per minute&lt;/strong>, &lt;strong>20 customers per minute&lt;/strong> are still being added to the back of the queue.&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>During the outage, the total &lt;strong>Wait time&lt;/strong> can be modelled by;&lt;/p>
+&lt;/div>
+&lt;div class="imageblock right text-center">
+&lt;div class="content">
+&lt;img src="equation-arrival-wait.png" alt="Real blocked time wait"/>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>After the outage, while the backlog is cleared, the total &lt;strong>Wait time&lt;/strong> can be modelled by;&lt;/p>
+&lt;/div>
+&lt;div class="imageblock right text-center">
+&lt;div class="content">
+&lt;img src="equation-backlog-wait.png" alt="Real blocked time wait"/>
+&lt;/div>
+&lt;/div>
+&lt;div class="paragraph">
+&lt;p>If we calculate our scenario;&lt;/p>
+&lt;/div>
+&lt;div class="imageblock right text-center">
+&lt;div class="content">
+&lt;img src="realAvWaitTime.png" alt="Real Average Order time"/>
+&lt;/div>
+&lt;/div>
+&lt;div class="admonitionblock note">
+&lt;table>
+&lt;tbody>&lt;tr>
+&lt;td class="icon">
+&lt;div class="title">Note&lt;/div>
+&lt;/td>
+&lt;td class="content">
+&lt;div class="paragraph">
+&lt;p>The &lt;strong>Average call duration &lt;em>experienced&lt;/em> by customers was 1.9 minutes!&lt;/strong>&lt;/p>
+&lt;/div>
+&lt;/td>
+&lt;/tr>
+&lt;/tbody>&lt;/table>
+&lt;/div>
+&lt;/div>
+&lt;/div>
+&lt;/div></description></item></channel></rss>

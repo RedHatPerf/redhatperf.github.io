@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Pages on Red Hat App Services Performance Team</title><link>http://example.org/page/</link><description>Recent content in Pages on Red Hat App Services Performance Team</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Sun, 13 Nov 2022 00:00:00 +0000</lastBuildDate><atom:link href="http://example.org/page/index.xml" rel="self" type="application/rss+xml"/><item><title>About</title><link>http://example.org/page/about/</link><pubDate>Sun, 13 Nov 2022 00:00:00 +0000</pubDate><guid>http://example.org/page/about/</guid><description>&lt;p>The Application Services Performance Team consist of software engineers, focusing on performance at Red Hat.&lt;/p>
+&lt;p>Predominantly focused on Java and the JVM, the performance team support many engineering teams within Red Hat identify and fix performance bottlenecks within Red Hat products.&lt;/p>
+&lt;p>Over the years, the performance team have developed a suite of tools for profiling applications, systems profiling, detecting changes in performance, and methodologies for identifying the causes of performance issues.&lt;/p>
+&lt;p>This blog contains some of the findings and learnings that the team has made.&lt;/p>
+&lt;p>We also provide community projects for a number of community open source performance tools;&lt;/p>
+&lt;ul>
+&lt;li>&lt;a class="link" href="https://github.com/Hyperfoil/hyperfoil" target="_blank" rel="noopener"
+>https://github.com/Hyperfoil/hyperfoil&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://github.com/Hyperfoil/horreum" target="_blank" rel="noopener"
+>https://github.com/Hyperfoil/horreum&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://github.com/Hyperfoil/qDup" target="_blank" rel="noopener"
+>https://github.com/Hyperfoil/qDup&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://github.com/agroal/agroal" target="_blank" rel="noopener"
+>https://github.com/agroal/agroal&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://github.com/agroal/pgagroal" target="_blank" rel="noopener"
+>https://github.com/agroal/pgagroal&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://pgmoneta.github.io/" target="_blank" rel="noopener"
+>https://pgmoneta.github.io/&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>Archives</title><link>http://example.org/page/archives/</link><pubDate>Tue, 28 May 2019 00:00:00 +0000</pubDate><guid>http://example.org/page/archives/</guid><description/></item><item><title>Search</title><link>http://example.org/page/search/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>http://example.org/page/search/</guid><description/></item></channel></rss>
