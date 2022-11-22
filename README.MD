@@ -13,18 +13,18 @@ Either `docker` & `docker-compose` installed, or `podman` and `podman-compose`
 #### Docker
 
 ````
-$ docker-compose -f ./container-compose.yml up
+$ docker-compose up
 ````
 
 #### Podman
 
 ````
-$ podman-compose -f ./container-compose.yml up
+$ podman-compose up
 ````
 
 A local version of the website will be available at;
 
-http://0.0.0.0:1313/ 
+http://0.0.0.0:2323/ 
 
 Edits will automatically be updated
 

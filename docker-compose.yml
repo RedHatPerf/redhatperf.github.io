@@ -1,0 +1,11 @@
+version: '3.1'
+services:
+  live-preview:
+    image: docker.io/hubci/hugo:0.105
+    ports:
+      - "2323:2323"
+    volumes:
+      - "${WORKING_PATH:-./}:/home/circleci/project:rw,z"
+    stop_signal: "${STOP_SIGNAL:-SIGTERM}"
+    command: "/usr/bin/hugo server -D --bind=0.0.0.0 --baseURL=http://0.0.0.0 --port=2323"
+    user: root
