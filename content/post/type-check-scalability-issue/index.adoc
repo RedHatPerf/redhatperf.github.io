@@ -10,16 +10,16 @@ authors:
 ---
 
 This article is a detailed and complementary content to https://youtu.be/G40VfIsnCdo[Quarkus Insights #107].
-The mentioned Quarkus Insights episode treats a breed of the scary (was registered at Halloween on purpose) JDK issue https://bugs.openjdk.org/browse/JDK-8180450["JDK-8180450: secondary_super_cache does not scale well"]
-that has caused massive performance degradation on several middleware frameworks eg Netty, Vert-x, Mutiny, Hibernate, Quarkus...
+This episode treats a breed of issues caused by the scary (was registered at Halloween on purpose) JDK issue; https://bugs.openjdk.org/browse/JDK-8180450["JDK-8180450: secondary_super_cache does not scale well"]
+that can causes massive performance degradation on several middleware frameworks e.g. Netty, Vert-x, Mutiny, Hibernate, Quarkus...
 
 == What's JDK-8180450?
 
-For who hasn't yet watched https://youtu.be/G40VfIsnCdo[Quarkus Insights #107], `JDK-8180450` is a severe scalability penalty happening while
+For those who haven't yet watched https://youtu.be/G40VfIsnCdo[Quarkus Insights #107], `JDK-8180450` is a severe scalability penalty happening while
 performing type checks (`instanceof`, `checkcast` and similar) against interfaces (so-called secondary super types).
 
 This scalability issue is triggered by massive concurrent updates to `Klass::_secondary_super_cache`
-among multiple threads, further causing https://en.wikipedia.org/wiki/False_sharing[False Sharing] with its surrounding fields eg `Klass::_secondary_supers`.
+from multiple threads, which in turn causes https://en.wikipedia.org/wiki/False_sharing[False Sharing] with its surrounding fields eg `Klass::_secondary_supers`.
 
 This https://github.com/openjdk/jdk11/blob/master/src/hotspot/share/oops/klass.hpp#L133[JDK 11 snippet] shows both fields and
 what they are used for:
@@ -34,8 +34,11 @@ class Klass : public Metadata {
   // ...
 ```
 
-To make it more concrete: https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Integer.html[`Integer`] 's implement both `Comparable` and `Serializable`;
-`_secondary_supers` contains both `Comparable` and `Serializable`, while `_secondary_super_cache` is used like this:
+To make it more concrete: 
+
+* https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Integer.html[`Integer`] 's implement both `Comparable` and `Serializable`
+* `_secondary_supers` contains both `Comparable` and `Serializable`, 
+* `_secondary_super_cache` is used byt he JVM like this:
 ```java
     Object o = new Integer(1);
     // _seconday_super_cache is empty
@@ -45,12 +48,12 @@ To make it more concrete: https://docs.oracle.com/en/java/javase/11/docs/api/jav
         useComparable((Comparable) o);
     }
 ```
-The `checkcast` on `useComparable` doesn't need to search `Comparable` on the `_secondary_supers` array, but can
-use `_secondary_super_cache`, saving useless work.
+The JVM does not need to search for `Comparable` in the `_secondary_supers` array when evaluating `checkcast` in the `useComparable`, instead it can
+use the `_secondary_super_cache` field, saving useless work.
 
-So, *How to cause such massive updates to the cache field*?
+So, *What causes massive amounts of updates to the cache field*?
 
-The answer is simpler then it seems: making it ping-pong between one or more values contained in `_secondary_supers`!
+The answer is simpler then it seems: making it ping-pong between multiple values contained in `_secondary_supers`!
 
 The code below shows an example of this dangerous code pattern:
 ```java
@@ -66,18 +69,18 @@ The code below shows an example of this dangerous code pattern:
         }
     }
 ```
-The comments on the code shows what happen if such code is called by a single thread, causing twice `_secondary_super_cache`
-invalidations for each `compareAndSerializable` method execution, but
+The comments in the code show what happens if this method is called by a single thread, causing two `_secondary_super_cache`
+invalidations for every `compareAndSerializable` method execution, but
 
-*What happen if there are more caller threads*?
+*What happens if there are more than one thread*?
 
 `Integer::_secondary_super_cache` is shared among all threads, leading to an increased chance to invalidate it at *every type check* (including `checkcast` 's on `useComparable`/`useSerializable`!).
 
 == Why's that scary?
 
 As mentioned on https://youtu.be/G40VfIsnCdo[Quarkus Insights #107], the Red Hat Middleware Team uses different versions of
-https://www.techempower.com/[Techempower Benchmark] to validate https://quarkus.io[Quarkus]'s performance regressions and
-hitting such scalability bottleneck in our lab has caused a performance degradation quite significant while running on our `Intel(R) Xeon(R) Gold 5218 CPU` with 64 logical cores (32 without Hyper-Threading, splitted in 2 https://en.wikipedia.org/wiki/Non-uniform_memory_access[NUMA] nodes):
+https://www.techempower.com/[Techempower Benchmark] to validate https://quarkus.io[Quarkus]'s performance regressions.
+Hitting such scalability bottleneck in our lab has caused a performance degradation quite significant while running on our `Intel(R) Xeon(R) Gold 5218 CPU` with 64 logical cores (32 without Hyper-Threading, splitted in 2 https://en.wikipedia.org/wiki/Non-uniform_memory_access[NUMA] nodes):
 
 image::64_cores.png[64 cores plaintext results]
 
@@ -89,41 +92,40 @@ As shown, even with few cores, if the mentioned bad code pattern is hit in the h
 
 === A stealthy performance killer!
 
-The scariest part has yet to come: what we've discovered while investigating on the https://github.com/netty/netty/issues/12708[most severe case]
+The scariest part has yet to come: what we discovered while investigating the https://github.com/netty/netty/issues/12708[most severe case]
 affecting our Quarkus results, is that "traditional" Java profiling tools didn't seem to help diagnosing it
 (eg https://access.redhat.com/documentation/en-us/openjdk/11/html/using_jdk_flight_recorder_with_openjdk/index[Java Flight Recorder], https://github.com/jvm-profiling-tools/async-profiler[Async Profiler]).
-Furthermore, few weeks after the Quarkus Insights recording, Netflix has published an https://netflixtechblog.com/seeing-through-hardware-counters-a-journey-to-threefold-performance-increase-2721924a2822[article]
+Furthermore, a few weeks after the Quarkus Insights recording, Netflix has published an https://netflixtechblog.com/seeing-through-hardware-counters-a-journey-to-threefold-performance-increase-2721924a2822[article]
 highlighting the same problem while using traditional Java Profilers.
 
 Specifically, https://access.redhat.com/documentation/en-us/openjdk/11/html/using_jdk_flight_recorder_with_openjdk/index[Java Flight Recorder] wasn't reporting
 any guilty stack trace pointing to the source of the issue, while https://github.com/jvm-profiling-tools/async-profiler[Async Profiler] was reporting
 broken stack traces (with the right cost/samples count). In both cases the bad code pattern was unnoticed, although
-the latter provided some hint that something wrong was going on.
+the latter provided some hint that something incorrect was occurring.
 
 image::async_profiler_2_8_broken.png[Async Profiler 2.8 plaintext CPU flamegraph]
 
-The above https://netflixtechblog.com/java-in-flames-e763b3d32166[flamegraph] shows at the bottom left of the graph
-some costy method, but failing to report the right ones: not useful to fix it!
+In the above https://netflixtechblog.com/java-in-flames-e763b3d32166[flamegraph], the bottom left of the graph shows
+some costy methods, but failing to report the correct methods: not useful to fix it!
 
 We've further investigated and discovered (thanks to https://developers.redhat.com/author/andrew-dinn[Andrew Dinn] and Andrei Pangin,
 https://github.com/jvm-profiling-tools/async-profiler[async profiler]'s author ) that the JFR mechanism to
 collect stack traces (implemented on the JDK's as http://psy-lob-saw.blogspot.com/2016/06/the-pros-and-cons-of-agct.html[AsyncGetCallTrace])
 isn't able to collect meaningful stack traces due to the
 https://github.com/openjdk/jdk11/blob/37115c8ea4aff13a8148ee2b8832b20888a5d880/src/hotspot/cpu/x86/macroAssembler_x86.cpp#L5486[JDK's type check code],
-which modifies the x86 register used to track the https://en.wikipedia.org/wiki/Stack_register[Stack Pointer]
-and key to detect the sampled trace caller method (more on this https://github.com/jvm-profiling-tools/async-profiler/issues/673#issuecomment-1304504745[Async Profiler issue's comment]).
+which modifies the x86 register that is used to track the https://en.wikipedia.org/wiki/Stack_register[Stack Pointer]
+and key to determine the sampled calling method (more on this https://github.com/jvm-profiling-tools/async-profiler/issues/673#issuecomment-1304504745[Async Profiler issue's comment]).
 
-Thanks to this investigation a recent https://bugs.openjdk.org/browse/JDK-8287425[JDK change] fixing the mentioned behaviour
-has been https://github.com/openjdk/jdk11u-dev/pull/1524[back-ported to JDK 11] as well,
-making this issue easier to be spotted by existing traditional (`AsyncGetCallTrace`-based) Java Profilers: a proper "Community Happy End".
+Thanks to this investigation, a recent https://bugs.openjdk.org/browse/JDK-8287425[JDK change] fixing the mentioned behaviour
+(which has been https://github.com/openjdk/jdk11u-dev/pull/1524[back-ported to JDK 11]) ,
+making this issue more easily spotted with existing (`AsyncGetCallTrace`-based) Java Profilers: a proper "Community Happy End".
 
 ==== ...and False Sharing?
 
-In addition to the above issue, https://en.wikipedia.org/wiki/False_sharing[False Sharing] is responsible to make profiling tools
-even more confused.
+In addition to the above issue, https://en.wikipedia.org/wiki/False_sharing[False Sharing] is further confuses profiling tools.
 
-On any invalidation of `Klass::_secondary_super_cache`, a search over `Klass::_secondary_supers` is performed,
-getting a severe penalty (if sitting in the same cache-line of the "noisy" field) and impacting other innocent code paths too:
+For every invalidation of `Klass::_secondary_super_cache`, a search over `Klass::_secondary_supers` is performed,
+causing a severe penalty (if stored in the same cache-line of the "noisy" field) and impacting other innocent code paths too:
 
 ```java
     // o.getClass() == Integer.class
@@ -135,12 +137,12 @@ getting a severe penalty (if sitting in the same cache-line of the "noisy" field
         // always happen
     }
 ```
-The snippet above shows that performing a type check over a not implemented interface always
-perform a slow path search over `_secondary_supers`, forcing loading the related field and causing
-some ping-pong of cache coherency traffic to happen, slowing down the innocent load instruction and making a profiler
-to highlight it.
+The snippet above shows that performing a type check for a non-implemented interface always
+causes the JVM to perform a slow path search over `_secondary_supers`. This in turn forces loading the related field and causes
+a ping-pong of cache coherency traffic. This has the effect of slowing down the innocent load instruction and causes a profiler
+to highlight it as a cpu bottlneck.
 
-The issue is better detailed in this https://youtu.be/G40VfIsnCdo?t=1411[Quarkus Insights part]
+The issue is detailed in this https://youtu.be/G40VfIsnCdo?t=1411[Quarkus Insights part]
 
 === OpenJDK compiler is (too) good
 
@@ -149,30 +151,30 @@ Some noticeable optimization strategies of OpenJDK are:
 * https://wiki.openjdk.org/display/HotSpot/Inlining[Inlining]
 * https://wiki.openjdk.org/display/HotSpot/TypeProfile[Type Profile]
 
-Thanks both, the JDK Optimizing Compiler can drop type check operations not making the issue to happen.
+Thanks to both optimizations, the JDK Compiler can drop type-check operations preventing the issue from happening.
 Unlucky runtime conditions can then cause such optimizations to fail (as mentioned in https://youtu.be/G40VfIsnCdo?t=1692[this Quarkus Insights part]),
 unexpectedly biting end-users (and real use cases).
 
-This smart compiler behaviour, together with the previous mentioned reasons, has made this issue to lie dormant and unnoticed for some time,
-especially on benchmarking rigs, where the simplicity of the use case was leaving the compiler more
+This smart compiler behaviour, together with the previous mentioned profiler issues, has meant this issue has lay dormant and unnoticed for some time,
+especially in benchmarking environments, where overly simplistic use cases were leaving the compiler more
 room to optimize and hide it.
 
 == What's next?
 In order to support our developers and the Java Community to diagnose this stealthy and severe performance issue,
-we've developed a https://github.com/raphw/byte-buddy[ByteBuddy]-powered https://github.com/RedHatPerf/type-pollution-agent[Java Agent] that has helped fixing the
+we've developed a https://github.com/raphw/byte-buddy[ByteBuddy]-powered https://github.com/RedHatPerf/type-pollution-agent[Java Agent]. This has helped fix the
 most severe https://bugs.openjdk.org/browse/JDK-8180450?focusedCommentId=14536886&page=com.atlassian.jira.plugin.system.issuetabpanels%3Acomment-tabpanel#comment-14536886[code paths] of our products
 (and the widely used https://github.com/netty/netty/issues/12708[Netty Framework]) and hopefully will be used by other
 players of the Java Community to diagnose if their code can be affected by it.
 
 Thanks to the reports of our developers and the rest of Java Community (including Netflix and Intel engineers),
-the https://bugs.openjdk.org/browse/JDK-8180450[scalability JDK issue] has raised priority and targeting the Java 21 release.
+the https://bugs.openjdk.org/browse/JDK-8180450[scalability JDK issue] now has raised a priority and a fix will be targeted for the Java 21 release.
 
 === Is it still worthy to fix our code?
 
 As usual: *Depends(TM)*.
 
-As said in the mentioned Quarkus Insights, some fixes have helped to use different and mode idiomatic code
-solutions to replace a misuse (often abuse) of the existing type check-based logic, often leading to better performance and,
+As mentioned in Quarkus Insights, some fixes have helped to use different and more idiomatic code
+solutions to replace the misuse (often abuse) of the existing type check-based logic, often leading to better performance and,
 moreover, way better code.
 
 In addition, there isn't yet (at the time this article has been published) any mention of back-porting plans,
