@@ -9,7 +9,14 @@ authors:
  - Francesco Nigro
 ---
 
-This article is a detailed and complementary content to https://youtu.be/G40VfIsnCdo[Quarkus Insights #107].
+This article is a detailed and complementary content to *Quarkus Insights #107: Quarkus Runtime performance - a peek into JVM internals*:
+++++
+<div class="imageblock right text-center">
+<div class="content">
+<iframe width="560" height="315" src="https://youtu.be/G40VfIsnCdo" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+</div>
+</div>
+++++
 This episode treats a breed of issues caused by the scary (was registered at Halloween on purpose) JDK issue; https://bugs.openjdk.org/browse/JDK-8180450["JDK-8180450: secondary_super_cache does not scale well"]
 that can causes massive performance degradation on several middleware frameworks e.g. Netty, Vert-x, Mutiny, Hibernate, Quarkus...
 
