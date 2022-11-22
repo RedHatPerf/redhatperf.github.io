@@ -31,7 +31,7 @@
 
         .article-content {
             margin: var(--card-padding) 0;
-            color: var(--card-text-color-main);
+            // color: var(--card-text-color-main);
 
             img {
                 max-width: 100%;
@@ -257,7 +257,7 @@
     }
 
     code {
-        color: var(--code-text-color);
+        // color: var(--code-text-color);
         background-color: var(--code-background-color);
         padding: 2px 4px;
         border-radius: var(--tag-border-radius);
