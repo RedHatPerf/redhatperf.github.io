@@ -17,6 +17,9 @@ getenv = ['^HUGO_']
 methods = ['(?i)GET|POST']
 urls = ['.*']
 
+[taxonomies]
+  author = "authors"
+  category = "categories"
 
 [markup]
   [markup.highlight]

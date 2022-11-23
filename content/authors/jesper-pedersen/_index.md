@@ -1,8 +1,7 @@
 ---
 name: Jesper Pedersen
+title: Jesper Pedersen
 photo: ''
 twitter: ''
 ---
-# Jesper Pedersen
-
 Principal Software Engineer - Application Services Performance Team

@@ -1,0 +1,25 @@
+{{ define "main" }}
+<h1>{{ .Params.name }}</h1>
+{{ .Content }}
+{{ with .Params.twitter }}
+  <p>
+    <a href="https://twitter.com/{{ substr . 0}}">
+      Follow {{ $.Params.name }} on Twitter
+    </a>
+  </p>
+{{ end }}
+
+<h2>Articles</h2>
+
+<div class="archives-group" >
+    <h2 class="archives-date section-title"><a href="{{ .Permalink }}">{{ .Title }}</a></h2>
+    <div class="article-list--compact">
+        {{ range .Pages }}
+            {{ partial "article-list/compact" . }}
+        {{ end }}
+    </div>
+</div>
+
+{{ partialCached "footer/footer" . }}
+
+{{ end }}

@@ -1,0 +1,16 @@
+
+{{ define "main" }}
+<div class="paragraph">
+
+<div class="archives-group" >
+    <h2 class="archives-date section-title"><a href="{{ .Permalink }}">{{ .Title }}</a></h2>
+    <div class="article-list--compact">
+        {{ range .Pages }}
+            {{ partial "authors/compact" . }}
+        {{ end }}
+    </div>
+</div>
+
+</ul>
+</div>
+{{ end }}

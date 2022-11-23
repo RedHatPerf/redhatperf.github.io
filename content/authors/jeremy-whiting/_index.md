@@ -1,8 +1,7 @@
 ---
 name: Jeremy Whiting
+title: Jeremy Whiting
 photo: ''
 twitter: ''
 ---
-# Jeremy Whiting
-
 Senior Software Engineer - Application Services Performance Team
