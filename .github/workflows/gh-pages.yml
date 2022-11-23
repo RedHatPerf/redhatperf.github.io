@@ -41,6 +41,11 @@ jobs:
         id: pages
         uses: actions/configure-pages@v2
 
+      - name: setup ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 2.7
+
       - name: setup asciidoctor
         uses: reitzig/actions-asciidoctor@v2.0.0
         with:
