@@ -12,8 +12,8 @@ authors:
 This article is a detailed and complementary content to *Quarkus Insights #107: Quarkus Runtime performance - a peek into JVM internals*:
 ++++
 <div class="imageblock right text-center">
-<div class="content">
-<iframe width="560" height="315" src="https://youtu.be/G40VfIsnCdo" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+<div class="content" style="text-align: center;">
+<iframe width="560" height="315" src="https://www.youtube.com/embed/G40VfIsnCdo" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
 </div>
 </div>
 ++++
@@ -31,7 +31,7 @@ from multiple threads, which in turn causes https://en.wikipedia.org/wiki/False_
 This https://github.com/openjdk/jdk11/blob/master/src/hotspot/share/oops/klass.hpp#L133[JDK 11 snippet] shows both fields and
 what they are used for:
 
-```c++
+{{< highlight cpp >}}
 class Klass : public Metadata {
   // ...
   // Cache of last observed secondary supertype
@@ -39,14 +39,14 @@ class Klass : public Metadata {
   // Array of all secondary supertypes
   Array<Klass*>* _secondary_supers;
   // ...
-```
+{{< / highlight >}}
 
 To make it more concrete: 
 
 * https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Integer.html[`Integer`] 's implement both `Comparable` and `Serializable`
 * `_secondary_supers` contains both `Comparable` and `Serializable`, 
 * `_secondary_super_cache` is used byt he JVM like this:
-```java
+{{< highlight java >}}
     Object o = new Integer(1);
     // _seconday_super_cache is empty
     // search Comparable on [ Comparable, Serializable ]
@@ -54,7 +54,7 @@ To make it more concrete:
         // _seconday_super_cache := Comparable -> cache HIT!
         useComparable((Comparable) o);
     }
-```
+{{< / highlight >}}
 The JVM does not need to search for `Comparable` in the `_secondary_supers` array when evaluating `checkcast` in the `useComparable`, instead it can
 use the `_secondary_super_cache` field, saving useless work.
 
@@ -63,7 +63,7 @@ So, *What causes massive amounts of updates to the cache field*?
 The answer is simpler then it seems: making it ping-pong between multiple values contained in `_secondary_supers`!
 
 The code below shows an example of this dangerous code pattern:
-```java
+{{< highlight java>}}
     // o.getClass() == Integer.class
     public static void compareAndSerialize(Object o) {
         if (o instanceof Comparable) {
@@ -75,7 +75,7 @@ The code below shows an example of this dangerous code pattern:
             useSerializable((Serializable) o);
         }
     }
-```
+{{< / highlight >}}
 The comments in the code show what happens if this method is called by a single thread, causing two `_secondary_super_cache`
 invalidations for every `compareAndSerializable` method execution, but
 
@@ -134,7 +134,7 @@ In addition to the above issue, https://en.wikipedia.org/wiki/False_sharing[Fals
 For every invalidation of `Klass::_secondary_super_cache`, a search over `Klass::_secondary_supers` is performed,
 causing a severe penalty (if stored in the same cache-line of the "noisy" field) and impacting other innocent code paths too:
 
-```java
+{{< highlight java>}}
     // o.getClass() == Integer.class
     // _secondary_super_cache always != CharSequence
     // slow path search on _secondary_supers := [ Comparable, Serializable ]
@@ -143,7 +143,7 @@ causing a severe penalty (if stored in the same cache-line of the "noisy" field)
     } else {
         // always happen
     }
-```
+{{< / highlight >}}
 The snippet above shows that performing a type check for a non-implemented interface always
 causes the JVM to perform a slow path search over `_secondary_supers`. This in turn forces loading the related field and causes
 a ping-pong of cache coherency traffic. This has the effect of slowing down the innocent load instruction and causes a profiler
