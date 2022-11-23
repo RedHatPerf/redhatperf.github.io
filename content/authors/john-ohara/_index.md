@@ -1,5 +1,4 @@
 ---
-name: John O'Hara
 title: John O'Hara
 photo: ''
 twitter: JohnnyDoItAll

@@ -1,5 +1,4 @@
 ---
-name: Francesco Nigro
 title: Francesco Nigro
 photo: ''
 twitter: forked_franz

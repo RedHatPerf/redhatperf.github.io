@@ -1,5 +1,4 @@
 ---
-name: Jesper Pedersen
 title: Jesper Pedersen
 photo: ''
 twitter: ''

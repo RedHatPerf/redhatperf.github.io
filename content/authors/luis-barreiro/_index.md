@@ -1,5 +1,4 @@
 ---
-name: Luis Barreiro
 title: Luis Barreiro
 photo: ''
 twitter: ''

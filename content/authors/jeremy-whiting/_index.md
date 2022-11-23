@@ -1,5 +1,4 @@
 ---
-name: Jeremy Whiting
 title: Jeremy Whiting
 photo: ''
 twitter: ''

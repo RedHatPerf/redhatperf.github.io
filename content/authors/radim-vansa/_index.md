@@ -1,5 +1,4 @@
 ---
-name: Radim vansa
 title: Radim vansa
 photo: ''
 twitter: ''

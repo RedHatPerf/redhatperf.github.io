@@ -1,5 +1,4 @@
 ---
-name: Stale Pedersen
 title: Stale Pedersen
 photo: ''
 twitter: ''

@@ -49,7 +49,7 @@
         {{- with $.Site.GetPage "taxonomyTerm" (printf "authors/%s" (urlize .)) }}
         <div>
             {{ partial "helper/icon" "user" }}
-          <a href="{{ .Permalink }}">{{ .Params.name }}</a>
+          <a href="{{ .Permalink }}">{{ .Params.title }}</a>
         </div>
         {{ end }}
         {{ end }}

@@ -1,5 +1,4 @@
 ---
-name: Will Reichert
 title: Will Reichert
 photo: ''
 twitter: ''
