@@ -206,7 +206,7 @@ and the impact of the OpenJDK compiler optimization strategies (briefly mentione
 * Norman Maurer
 * Andrei Pangin
 * Johannes Bechberger
-* Quarkus, Hibernate, Vert-x and Mutiny teams for the patience and the efforts to try the agent and fix our products trusting our tools
+* Quarkus, Hibernate, Vert-x, Mutiny and Infinispan teams for the patience and the efforts to try the agent and fix our products trusting our tools
 * Netflix & Intel team and their https://netflixtechblog.com/seeing-through-hardware-counters-a-journey-to-threefold-performance-increase-2721924a2822[awesome article]
 mentioned in <<_a_stealthy_performance_killer,this>> section
 ====
