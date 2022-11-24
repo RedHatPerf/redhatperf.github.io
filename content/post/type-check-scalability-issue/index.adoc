@@ -120,7 +120,7 @@ https://github.com/jvm-profiling-tools/async-profiler[async profiler]'s author )
 collect stack traces (implemented on the JDK's as http://psy-lob-saw.blogspot.com/2016/06/the-pros-and-cons-of-agct.html[AsyncGetCallTrace])
 isn't able to collect meaningful stack traces due to the
 https://github.com/openjdk/jdk11/blob/37115c8ea4aff13a8148ee2b8832b20888a5d880/src/hotspot/cpu/x86/macroAssembler_x86.cpp#L5486[JDK's type check code],
-which modifies the stack size and by consequence the x86 register used to track the https://en.wikipedia.org/wiki/Stack_register[Stack Pointer]
+which modifies the stack size and as a consequence the x86 register used to track the https://en.wikipedia.org/wiki/Stack_register[Stack Pointer]
 and key to determine the sampled calling method (more on this https://github.com/jvm-profiling-tools/async-profiler/issues/673#issuecomment-1304504745[Async Profiler issue's comment]).
 
 Thanks to this investigation, a recent https://bugs.openjdk.org/browse/JDK-8287425[JDK change] fixing the mentioned behaviour
@@ -176,9 +176,9 @@ players of the Java Community to diagnose if their code can be affected by it.
 Thanks to the reports of our developers and the rest of Java Community (including Netflix and Intel engineers),
 the https://bugs.openjdk.org/browse/JDK-8180450[scalability JDK issue] now has raised a priority and a fix will be targeted for the Java 21 release.
 
-As a separate effort we've evaluated with the OpenJDK Red Hat team alternatives fixes to the infamous JDK issue as well, ending up rejecting ad-hoc flags to disable such optimization (as it was designed to be)
-because too harmful for existing users, which unconsciously have benefited from it till now. We are trusty that our feedbacks
-will help making a better decision for the Java Community, present and future.
+As a separate effort, we've worked with the OpenJDK Red Hat team to evaluate alternative fixes to the infamous JDK issue; we have rejected ad-hoc flags to disable such optimization (as it was designed to operate)
+; due to the potentially harmful effects on existing users, which unconsciously have benefited from it till now. We trust that the feedback we have received
+will help provide a better outcome for the Java Community, present and future.
 
 === Is it still worthy to fix our code?
 
