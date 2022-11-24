@@ -28,7 +28,7 @@ performing type checks (`instanceof`, `checkcast` and similar) against interface
 This scalability issue is triggered by massive concurrent updates to `Klass::_secondary_super_cache`
 from multiple threads, which in turn causes https://en.wikipedia.org/wiki/False_sharing[False Sharing] with its surrounding fields eg `Klass::_secondary_supers`.
 
-This https://github.com/openjdk/jdk11/blob/master/src/hotspot/share/oops/klass.hpp#L133[JDK 11 snippet] shows both fields and
+This https://github.com/openjdk/jdk11/blob/37115c8ea4aff13a8148ee2b8832b20888a5d880/src/hotspot/share/oops/klass.hpp#L133[JDK 11 snippet] shows both fields and
 what they are used for:
 
 {{< highlight cpp >}}
