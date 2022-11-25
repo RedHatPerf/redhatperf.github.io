@@ -45,7 +45,7 @@ To make it more concrete:
 
 * https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Integer.html[`Integer`] 's implement both `Comparable` and `Serializable`
 * `_secondary_supers` contains both `Comparable` and `Serializable`, 
-* `_secondary_super_cache` is used byt he JVM like this:
+* `_secondary_super_cache` is used by the JVM like this:
 {{< highlight java >}}
     Object o = new Integer(1);
     // _seconday_super_cache is empty
