@@ -1,6 +1,6 @@
 ---
 title: "Journey to a N-fold improvement due to a stealthy scalability issue"
-date: 2022-11-16T00:00:00Z
+date: 2022-11-25T00:00:00Z
 categories: ['performance', 'benchmarking', 'methodology']
 summary: 'Learn about fixing a severe JIT scalability issue'
 image: 'type_pollution.png'
