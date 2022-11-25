@@ -115,13 +115,11 @@ image::async_profiler_2_8_broken.png[Async Profiler 2.8 plaintext CPU flamegraph
 In the above https://netflixtechblog.com/java-in-flames-e763b3d32166[flamegraph], the bottom left of the graph shows
 some costy methods, but failing to report the correct methods: not useful to fix it!
 
-We've further investigated and discovered (thanks to https://developers.redhat.com/author/andrew-dinn[Andrew Dinn] and Andrei Pangin,
-https://github.com/jvm-profiling-tools/async-profiler[async profiler]'s author ) that the JFR mechanism to
-collect stack traces (implemented on the JDK's as http://psy-lob-saw.blogspot.com/2016/06/the-pros-and-cons-of-agct.html[AsyncGetCallTrace])
-isn't able to collect meaningful stack traces due to the
-https://github.com/openjdk/jdk11/blob/37115c8ea4aff13a8148ee2b8832b20888a5d880/src/hotspot/cpu/x86/macroAssembler_x86.cpp#L5486[JDK's type check code],
+We've further investigated and discovered that the JFR mechanism to collect stack traces
+(implemented as http://psy-lob-saw.blogspot.com/2016/06/the-pros-and-cons-of-agct.html[AsyncGetCallTrace])
+isn't able to collect meaningful ones. This is due to https://github.com/openjdk/jdk11/blob/37115c8ea4aff13a8148ee2b8832b20888a5d880/src/hotspot/cpu/x86/macroAssembler_x86.cpp#L5486[JDK's type check code],
 which modifies the stack size and by consequence the x86 register used to track the https://en.wikipedia.org/wiki/Stack_register[Stack Pointer]
-and key to determine the sampled calling method (more on this https://github.com/jvm-profiling-tools/async-profiler/issues/673#issuecomment-1304504745[Async Profiler issue's comment]).
+(more on this https://github.com/jvm-profiling-tools/async-profiler/issues/673#issuecomment-1304504745[Async Profiler issue's comment]).
 
 Thanks to this investigation, a recent https://bugs.openjdk.org/browse/JDK-8287425[JDK change] fixing the mentioned behaviour
 (which has been https://github.com/openjdk/jdk11u-dev/pull/1524[back-ported to JDK 11]) ,
@@ -129,10 +127,10 @@ making this issue more easily spotted with existing (`AsyncGetCallTrace`-based) 
 
 ==== ...and False Sharing?
 
-In addition to the above issue, https://en.wikipedia.org/wiki/False_sharing[False Sharing] is further confuses profiling tools.
+In addition to the above issue, https://en.wikipedia.org/wiki/False_sharing[False Sharing] confuses profiling tools even further.
 
 For every invalidation of `Klass::_secondary_super_cache`, a search over `Klass::_secondary_supers` is performed,
-causing a severe penalty (if stored in the same cache-line of the "noisy" field) and impacting other innocent code paths too:
+causing a severe penalty (if stored in the same cache-line of the "noisy" `Klass` field) and impacting other innocent code paths too:
 
 {{< highlight java>}}
     // o.getClass() == Integer.class
@@ -144,10 +142,10 @@ causing a severe penalty (if stored in the same cache-line of the "noisy" field)
         // always happen
     }
 {{< / highlight >}}
-The snippet above shows that performing a type check for a non-implemented interface always
-causes the JVM to perform a slow path search over `_secondary_supers`. This in turn forces loading the related field and causes
+The snippet above shows that performing a type check for a non-implemented interface causes the JVM to perform a slow path search
+over `_secondary_supers`. This in turn forces loading of the related field and causes
 a ping-pong of cache coherency traffic. This has the effect of slowing down the innocent load instruction and causes a profiler
-to highlight it as a cpu bottlneck.
+to highlight it as a cpu bottleneck.
 
 The issue is detailed in this https://youtu.be/G40VfIsnCdo?t=1411[Quarkus Insights part]
 
@@ -160,7 +158,7 @@ Some noticeable optimization strategies of OpenJDK are:
 
 Thanks to both optimizations, the JDK Compiler can drop type-check operations preventing the issue from happening.
 Unlucky runtime conditions can then cause such optimizations to fail (as mentioned in https://youtu.be/G40VfIsnCdo?t=1692[this Quarkus Insights part]),
-unexpectedly biting end-users (and real use cases).
+unexpectedly biting end-users.
 
 This smart compiler behaviour, together with the previous mentioned profiler issues, has meant this issue has lay dormant and unnoticed for some time,
 especially in benchmarking environments, where overly simplistic use cases were leaving the compiler more
