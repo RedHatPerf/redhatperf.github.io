@@ -18,7 +18,7 @@ Shifting from versioned products to continual delivered services changes the ris
 
 == Problem Statement
 
-How can do performance engineering teams enable Eng / QE / SRE to integrate Performance Testing into their workflows, to reduce the risk that performance regressions propagate through to production services?
+How can performance engineering teams enable Eng / QE / SRE to integrate Performance Testing into their workflows, to reduce the risk that performance regressions propagate through to production services?
 
 
 == Typical Product Workflow 
@@ -28,7 +28,7 @@ A typical "boxed product"footnote:[A product that is shipped to customers, eithe
 
 image::typical_workflow.png[Typical Workflow,,,float="right",align="center"]
 
-The key issues that this type fo workflow has is;
+The key issues that this type of workflow has;
 
 * There is a *break in continuity* between `tag build` and `release` stages of the CI Build pipeline
 * Development, build and performance testing are performed by different teams, each passing *async* messages between teams
@@ -104,12 +104,12 @@ In a "Shifted-left" model;
 
 Continual analysis is performed by experienced engineers, but the process does not require manual intervention with each release.
 
-Engineers are free to 
+Engineers are free to focus on implementing features and not worry about regressions.  When regressions are detected, the information they need to identify the root cause is readily available, in a suitable format.
 
 == Repository Bots
 
 INFORMATION:: 
-Repository Bots initiate performance tests against PR's. Their purpose is to allow Engineers to make a decision on whether to merge a PR or not. The results need to be actionable by engineers. Profiling data should also be provide to allow engineers to understand what their changes are doing
+Repository Bots initiate performance tests against PR's. Their purpose is to allow engineers to make a decision on whether to merge a PR or not. The results need to be actionable by engineers. Profiling data should also be provide to allow engineers to understand what their changes are doing
 
 Receive report & analysis of impact of changes to key performance metrics
 
@@ -124,7 +124,7 @@ Allow automated capture of profiling data of system under load, allowing enginee
 == Integrated Performance Thresholds
 
 INFORMATION:: 
-The aim of Integrated Performance Tests is to determine whether a release mets acceptable levels of performance with respect to customer expectations, not to capture changes over time. The results need to be automatically calculated and should provide a boolean Pass/Fail result.
+The aim of Integrated Performance Tests is to determine whether a release meets acceptable levels of performance with respect to customer expectations, not to capture changes over time. The results need to be automatically calculated and should provide a boolean Pass/Fail result.
 
 * Pass/Fail criteria - the same as functional tests, the performance should be either be acceptable, or not-acceptable
 * Fully automated - not manual intervention / analysis
