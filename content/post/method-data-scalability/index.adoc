@@ -1,6 +1,6 @@
 ---
 title: "Sharing is (S)Caring: How Tiered Compilation Affects Java Application Scalability"
-date: 2024-12-20T00:00:00Z
+date: 2025-08-07T00:00:00Z
 categories: ['performance', 'benchmarking', 'methodology']
 summary: 'Understand how Tiered Compilation impacts the scalability of Java applications in modern environments.'
 image: 'sharing_is_scaring.png'
