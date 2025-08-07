@@ -121,7 +121,7 @@ Make sure your Java application has enough CPU resources to let the JVM complete
 ### Platform-level Solutions
 
 - **In OpenShift:**  
-  Use [Topology Manager](https://docs.openshift.com/container-platform/latest/nodes/topology-manager.html) to ensure your pods run on CPUs within a single NUMA node. This reduces the performance hit caused by spreading CPU resources across multiple nodes.
+  Use https://docs.openshift.com/container-platform/latest/nodes/topology-manager.html[Topology Manager] to ensure your pods run on CPUs within a single NUMA node. This reduces the performance hit caused by spreading CPU resources across multiple nodes.
 
 - **Other Kubernetes platforms:**  
   Look for node/pod affinity or CPU pinning features in your orchestrator to keep your application’s CPUs local.
@@ -143,7 +143,7 @@ Make sure your Java application has enough CPU resources to let the JVM complete
 
 This topic gained attention after observing a real-world customer case where these scalability issues occurred.
 Following this, we engaged with the OpenJDK Team to discuss potential improvements.
-You can find more details in the discussion thread at https://mail.openjdk.org/pipermail/hotspot-dev/2024-December/099863.html.
+You can find more details in the discussion thread at https://mail.openjdk.org/pipermail/hotspot-dev/2025-February/100965.html.
 
 Additionally, a related study on this issue is available at https://ckirsch.github.io/publications/proceedings/MPLR24.pdf#page=117.
 While the study does not focus specifically on containerized applications, it provides valuable insights into the underlying scalability challenges.
