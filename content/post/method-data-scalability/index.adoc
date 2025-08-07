@@ -113,6 +113,32 @@ To summarize:
 
 Understanding these challenges is key to optimizing Java application performance in modern environments.
 
+## How Can You Avoid or Fix This Scalability Issue?
+
+**TL;DR:**  
+Make sure your Java application has enough CPU resources to let the JVM complete its JIT compilation. If running in containers (like OpenShift), configure your pods to keep all CPU resources on a single NUMA node to avoid cross-node penalties.
+
+### Platform-level Solutions
+
+- **In OpenShift:**  
+  Use [Topology Manager](https://docs.openshift.com/container-platform/latest/nodes/topology-manager.html) to ensure your pods run on CPUs within a single NUMA node. This reduces the performance hit caused by spreading CPU resources across multiple nodes.
+
+- **Other Kubernetes platforms:**  
+  Look for node/pod affinity or CPU pinning features in your orchestrator to keep your application’s CPUs local.
+
+### JVM and Resource Tuning
+
+- **Increase CPU quota/resources:**  
+  If your application is stuck at Tier 3 (suboptimal compilation), it likely means the JVM doesn't have enough CPU to fully optimize your code. Increase the CPU limits for your container or VM so the JVM can finish C2 (Tier 4) compilation. This will reduce the time your app spends running in the slower, telemetry-heavy tier.
+
+- **Know your workload:**  
+  Monitor your application's startup and peak load. Tune your container or VM resources so the JIT compiler isn't starved for CPU during these periods.
+
+### In Short
+
+- Don’t let your JVM run with too little CPU, especially during startup or peak load.
+- Pin your application to a single NUMA node in containerized environments to avoid unnecessary performance penalties.
+
 # Closing Note
 
 This topic gained attention after observing a real-world customer case where these scalability issues occurred.
