@@ -1,0 +1,342 @@
+---
+title: "Taming Performance Testing with qDup"
+date: 2025-07-16T00:00:00Z
+categories: ['performance', 'methodology', 'CI/CD', 'automation']
+summary: 'This is the story of how we tamed cross-team collaboration performance testing by leveraging a tool called qDup to streamline complex test automation setups'
+image: 'superheroes-automation-banner.png'
+related: ['']
+authors: 
+ - Andrea Lamparelli
+---
+= Taming Performance Testing with qDup
+:icons: font
+
+At scale, performance engineering hinges on reproducibility and maintainability. 
+In large organizations, where multiple teams test the same product across varied environments, 
+it’s like trying to play a symphony with different orchestras: unless everyone follows 
+the same score, you'll never hear the same music.
+That was the challenge we faced when we kicked off the "superheroes-automation"
+footnote:automation[https://github.com/RedHatPerf/superheroes-automation] 
+project, an ambitious cross-organization initiative involving both Red Hat and IBM. 
+Our goal was simple, yet daunting: to create a fair and consistent performance testing 
+setup for comparing different Java technologies. We needed a setup that was not only robust 
+but also perfectly reproducible, ensuring that every person involved, regardless of their 
+team or environment, would run the exact same tests in the exact same way. This is the 
+story of how we tamed the performance testing beast and achieved true reproducibility 
+by leveraging qDup footnote:qdup[https://github.com/Hyperfoil/qDup].
+
+== The Challenge
+
+Our initiative brought together talented engineers from across two organizations, but with 
+that came a diverse array of local development environments, preferred tools, and ingrained 
+testing habits. This diversity, which is usually a strength, quickly became our biggest hurdle. 
+ 
+
+Our primary struggle in the early stages was the stark inability to reproduce the same results 
+between teams. We would run what we thought was the same performance test, only to get 
+frustratingly different numbers. With each team having their own scripts and manual steps to 
+spin up this environment, subtle but significant variations were inevitable. Were the results 
+different because of the technology we were testing, or because one team's database was 
+configured slightly differently? The data was noisy, making any meaningful comparison impossible. 
+We were spending more time debugging our setups than analyzing performance.
+
+The inherent complexity of our chosen application, Quarkus Superheroes 
+footnote:[https://github.com/quarkusio/quarkus-super-heroes], required an automated 
+setup. This was the only way to guarantee a uniform configuration for every user and ensure the 
+solution was portable enough to function reliably across diverse environments – ensuring everyone 
+was actually testing the same thing.
+
+== The Orchestrator of Our Performance Symphony 
+
+Faced with these challenges, we needed a powerful orchestrator. As the maintainers and developers 
+behind qDup footnote:qdup[], we knew we had the perfect tool for the job. In fact, we built qDup 
+precisely to solve these kinds of complex automation problems that rely heavily on shell scripting.
+
+=== What is qDup?
+
+At its heart, qDup is a powerful orchestrator for scripting. It’s not a new, proprietary programming 
+language you have to learn. Instead, it takes the shell commands and scripts your teams already know 
+and use, and it gives them superpowers. It allows you to structure your automation, manage states 
+between different scripts, and coordinate their execution across multiple servers.  
+
+It is designed to follow the same workflow as a user at a terminal so that commands can be performed 
+with or without qDup. Commands are grouped into re-usable scripts that are mapped to different hosts 
+by roles. All defined using simple YAML files, very similar to Ansible playbooks. 
+
+qDup has 3 pre-defined phases for script execution to follow the usual performance test workflow: 
+_setup_, _run_, and _cleanup_.
+
+=== How is qDup solving the challenge?
+
+We chose to use and continue to develop qDup because it is founded on principles that directly 
+address the challenges of collaborative automation, especially in a bash-centric world: 
+
+* *It embraces bash; it doesn't replace it*: This is the most crucial design philosophy behind 
+qDup. We know that most automation is built on the foundation of shell scripts. So, instead of 
+forcing teams to learn a new language, qDup allows them to leverage their existing skills and 
+scripts. This dramatically lowers the barrier to entry and accelerates adoption. 
+
+* *Declarative YAML as the single source of truth*: We believe automation workflows should be 
+easy to read and version. By using YAML, we provide a declarative way to define the entire process. 
+This file, when checked into Git, becomes the undeniable source of truth, ending any debate about 
+how a test should be run. The workflows can be split into several files to improve readability 
+and maintainability. 
+
+* *Guaranteed consistency is a core tenet*: The fundamental promise of qDup is to guarantee that 
+every user runs the exact same commands in the exact same order. This isn't just a feature; it's 
+the core reason the tool exists. It’s our definitive solution to the "it works on my machine" problem. 
+
+* *Orchestration is built-in, not an afterthought*: From day one, qDup was designed to handle 
+multi-machine workflows. For a realistic, complex application like Quarkus Superheroes, this is 
+non-negotiable. Defining roles (likely running on different machines) and coordinating tasks/scripts 
+between them is a native feature, not a bolted-on hack.
+
+Ultimately, we built qDup to transform complex, error-prone manual setups into a single, reliable command. 
+Turning a page-long README file into “qdup qdup.yaml” is precisely the empowerment we aim to provide 
+to developers and testers.
+
+== Our qDup Automation
+
+Theory is great, but the real test is in the implementation. Adopting qDup wasn't just about choosing 
+a tool; it was about embracing a new, structured way of thinking about our automation, built on the 
+back of simple, powerful bash scripts. 
+
+We structured our entire performance testing workflow around qDup's three distinct phases. This brought 
+a clean and predictable order to our process, making it easy for anyone on the team to understand.
+
+[start=1]
+. *Setup Phase*: This was the workhorse. Before any test could run, this phase would execute a series 
+of our bash scripts to: 
+
+.. Build the correct Quarkus Superheroes (either native, OpenJDK, or Semeru Runtimes depending on the test). 
+This is optional depending on the test, as it can also consume published artifacts. 
+
+.. Start all the necessary services for the Quarkus app to run, e.g., databases, registries, etc. 
+
+.. After that, startup all the Quarkus Superheroes microservices in the correct dependencies order 
+
+. *Run Phase*: With everything perfectly in place, this phase had one job: execute a performance test 
+and monitor the running application, i.e., what we will refer to System Under Test or SUT.  
+
+.. A role would be responsible to trigger our Hyperfoil benchmark against the SUT; the specific benchmark 
+configuration could be provided as parameter of the execution.  
+
+.. A different role is responsible for starting up all profiling tools that are meant to monitor the 
+SUT behavior, i.e., capturing additional data for further analysis like CPU usages, memory footprints, 
+flamegraphs, etc. 
+
+. *Cleanup Phase*: Just as important as the setup, this phase would gracefully stop the application, 
+shut down the database, and—most critically—run scripts to collect all the necessary logs and performance 
+metrics from the various machines. It conveniently places all results in a local directory, ready for 
+immediate analysis. 
+
+The overall automation was implemented allowing all services were sufficiently isolated among each other, 
+e.g., ensuring that load drivers and data sources would have run on different machines with respect to 
+the SUT, to obtain reliable results and avoid that under tools would affect the SUT performances. 
+
+=== A glimpse into the configuration 
+
+The entry point of the superheroes automation is the root "qdup.yaml" file, which defines which scripts 
+to run, where and when to run them.
+
+
+[source,yaml]
+----
+hosts:
+  sut: ${{SUT_SERVER}}
+  datasource: ${{DS_SERVER}}
+  driver: ${{LOAD_DRIVER_SERVER}}
+
+roles:
+  datasource:
+    hosts:
+      - datasource
+    setup-scripts:
+      - infer-datasource-hostnames
+      - prepare-superheroes
+      - start-jaeger
+      - start-otel
+      - start-heroes-db
+      - start-villains-db
+      - start-locations-db
+      - start-fights-db
+      - start-apicurio
+      - start-kafka
+    cleanup-scripts:
+      - cleanup-datasources
+
+  sut:
+    hosts:
+      - sut
+    setup-scripts:
+      - start-jit-server
+      - prepare-images # should be exposed by script files in /modes folder
+      - infer-datasource-hostnames
+      - infer-services-hostnames
+      - start-heroes-rest
+      - start-villains-rest
+      - start-locations-grpc
+      - start-fights-rest
+      - start-fights-ui
+    cleanup-scripts:
+      - cleanup-superheroes
+
+  # all these scripts must be exposed by script files in /drivers folder
+  driver:
+    hosts:
+      - driver
+    setup-scripts:
+      - setup-driver
+    run-scripts:
+      - run-benchmark
+    cleanup-scripts:
+      - cleanup-driver
+
+  profiler:
+    hosts:
+      - sut
+    setup-scripts:
+      - app-prof-setup
+    run-scripts:
+      - run-pidstat
+      - run-vmstat
+      - run-mpstat
+      - run-pmap
+      - run-strace
+      - run-perfstat
+    cleanup-scripts:
+      - export-metrics
+      - cleanup-profiling
+----
+
+Let's break down our qDup script definition file:
+
+The `hosts` section defines the logical names for the physical or virtual machines involved in our test. We use variables like `${{SUT_SERVER}}` so we can easily point to different servers without changing the script itself.
+
+* `sut`: This is our System Under Test, the application we are benchmarking, i.e., the superheroes services.
+
+* `datasource`: This machine hosts all our backend dependencies, like databases and message queues.
+
+* `driver`: This is where the load driver is executed, this is required to ensure the load driver itself won't affect the SUT performances.
+
+The `roles` section describes the responsibilities of each component in the test. Each `role` is assigned to one or more hosts and has scripts defined for three distinct phases: `setup`, `run`, and `cleanup` which are executed exactly in this order. The big difference among these 3 phases is how the scripts are executed, in `setup` and `cleanup` phases all the scripts are executed sequentially in the same order as they are specified. Whereas scripts defined in the `run` phase are all executed asynchronously, this means that all of them are started at the same time.
+
+When you have to deal with multiple concurrent scripts, running for instance on different hosts it could become very tricky to coordinate them. This is when qDup comes in providing a very great feature: **signals**. Signals are a way to coordinated different scripts, e.g., you can use the `wait-for: MY_SIGNAL` command to block the execution of such script waiting for another script to raise that signal, e.g., with `signal: MY_SIGNAL`.
+
+The **datasource** role
+
+This role runs on the datasource host and is responsible for setting up the entire backend infrastructure needed by our application.
+
+* setup-scripts: This is a comprehensive list of tasks that brings our backend to life. It starts observability tools like Jaeger and OpenTelemetry, multiple databases (heroes, villains, locations, fights), a Kafka message broker, and an Apicurio schema registry. All these backend datasources are required to properly start the Superheroes application.
+
+* cleanup-scripts: After the test, it runs a single script to cleanly shut down and remove all the services it started.
+
+The **sut** role
+
+This role, assigned to the `sut` host, manages the application we are actually testing.
+
+* setup-scripts: These scripts prepare and launch our microservices application. This includes starting REST APIs for heroes, villains, and fights, a gRPC service for locations, and a user interface (optional). Crucially, scripts like `infer-datasource-hostnames` ensure our application knows how to connect to the backend services set up by the `datasource` role.
+
+* cleanup-scripts: Tears down all the application components.
+ 
+ 
+The **driver** role
+
+This role runs on the `driver` host and is the active participant that executes the benchmark.
+
+* setup-scripts: Prepares the load generation tools and environment.
+
+* run-scripts: This is the heart of the test. The `run-benchmark` script is executed during the "run" phase of the qDup lifecycle, running the specified/provided benchmark (e.g., using Hyperfoil footnote:[https://github.com/Hyperfoil/Hyperfoil] load driver).
+
+* cleanup-scripts: Cleans up the driver machine after the test is complete.
+
+The **profiler** role
+
+This is a special role that runs on the same host as our `sut`. Its sole purpose is to gather detailed performance metrics directly from the application server while the test is running.
+
+* setup-scripts: Prepares the necessary profiling tools on the sut machine.
+
+* run-scripts: These scripts run in parallel with the driver's run-benchmark script. We use a suite of powerful Linux utilities like `pidstat`, `vmstat`, `mpstat`, and `perfstat` to capture CPU, memory, I/O, and process-level activity as well as `async-profiler` for Java application profiling.
+
+* cleanup-scripts: Once the benchmark is over, these scripts collate all the collected data into an `export-metrics` step and then clean up the profiling tools.
+
+=== How do you run this?
+
+Running `qDup` is as easy as executing a Java JAR file
+
+[source,bash]
+----
+$ java -jar /path/to/qDup-0.9.0-uber.jar [... all files] qdup.yaml
+----
+
+You just need to include all files you need to properly execute the automation.
+The tool will complain if something is missing, e.g., you are referencing a script
+that is not defined anywhere.
+
+The process of running `qDup` has been simplified further by making use of jbang 
+footnote:[https://www.jbang.dev/], a tool that let's you run self-contained source-only 
+Java programs with unprecedented ease.
+
+You don't need to download the uber JAR anymore, simply run the following command
+and jbang will take care of downloading whatever it needs to properly run `qDup`.
+
+----
+$ jbang qDup@hyperfoil [... all files] qdup.yaml
+----
+
+== From Performance Pains to Gains
+
+Adopting `qDup` was about more than just implementing a new tool; it was about transforming our entire 
+approach to performance testing. The "pains" of our initial phase, filled with inconsistent data 
+and setup friction, quickly turned into significant "gains" for the project and everyone involved.
+
+
+=== Finally, truly reproducible results
+
+The single most important outcome was achieving our primary goal: *consistent and comparable performance 
+test results*. The "noise" created by dozens of different manual setups was gone. When we saw a difference 
+in the numbers, we knew it was because of the technology we were testing, not because someone had a 
+different configuration. We could now confidently compare the performance of the native Quarkus Superheroes 
+application against its JVM counterpart, knowing we were looking at a true signal, not random variations. 
+The data was clean, reliable, and trustworthy.
+
+=== Collaboration reimagined
+
+With a standardized setup defined in our Git repository, the dynamic between teams shifted dramatically. 
+The conversations were no longer about "why my results are different from yours." Instead, they asked 
+"how can we improve our shared testing process?" 
+
+If someone wanted to tweak a benchmark or add a new setup step, they would simply submit a pull request 
+against the superheroes-automation repository. This made collaboration transparent and efficient. 
+We were no longer debugging individual environments; we were collectively improving a shared, automated 
+asset that benefited everyone. 
+
+=== A new level of confidence
+
+Ultimately, qDup gave us unwavering confidence in our test results. Every number we presented in our 
+findings was backed by an automated, version-controlled, and highly consistent environment. We weren't just 
+sharing data; we were sharing data with a clear and verifiable history. This level of rigor meant we could 
+stand behind our conclusions with certainty when making strategic recommendations based on performance 
+outcomes. It’s the difference between guessing and knowing.
+
+
+== Conclusion & Future Works
+
+The journey to takle our cross-organizational performance testing was a formidable challenge, born from the 
+chaos of inconsistent environments and irreproducible results. By embracing qDup, we did more than just adopt 
+a new tool; we adopted a new philosophy for automation. We transformed a complex, error-prone manual process 
+into a single, reliable command that delivered the consistency we desperately needed.
+
+To summarize our key achievements:
+
+* We achieved true reproducibility: By establishing a single, version-controlled source of truth, qDup eliminated the "it works on my machine" problem. We can now trust our data, knowing that any performance variation comes from the technology under test, not the setup.
+
+* We transformed collaboration: The conversation shifted from debugging individual setups to collectively improving a shared asset. The pull request model for automation changes fostered a transparent and efficient workflow, making every team member a stakeholder in the quality of our testing.
+
+* We gained unwavering confidence: With a robust and consistent foundation, we can now stand behind our performance numbers with certainty, enabling us to make informed, data-driven decisions.
+
+While our current setup has proven immensely successful, our work is far from over. We are committed to refining this project and empowering others to achieve the same results. Our future efforts will likely focus on:
+
+* Improving documentation: We plan to enhance our documentation with detailed guides and tutorials. Our goal is to make it easier for new teams and contributors to understand our automation patterns and get up and running quickly, lowering the barrier to entry for robust performance testing.
+
+* Publishing reusable scripts: Many of the scripts we've written for tasks like setting up databases, configuring profilers, or launching services are not specific to the Superheroes application. We intend to extract these common, battle-tested scripts into a shareable library. By making these components available to everyone, we hope to reduce duplication and allow others to assemble their own complex qDup workflows with greater speed and reliability.
