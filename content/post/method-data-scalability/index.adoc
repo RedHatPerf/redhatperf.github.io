@@ -30,7 +30,7 @@ Over time, methods that are heavily used ("hot spots") are further optimized wit
 
 This tiered approach ensures quick application responsiveness while progressively optimizing performance-critical code paths. The name "HotSpot" reflects this focus on dynamically identifying and optimizing hot spots in code execution for efficiency.
 
-What’s less known about tiered compilation is that the C2 compiler can be very CPU intensive and, when it doesn’t have enough resources, its activity https://jpbempel.github.io/2020/05/22/startup-containers-tieredcompilation.html[affects startup time].
+What’s less known about tiered compilation is that the C2 compiler can be very CPU intensive and, when it doesn’t have enough resources, its activity could affect application performances including https://jpbempel.github.io/2020/05/22/startup-containers-tieredcompilation.html[startup time].
 This has led to different initiatives and efforts, like https://openjdk.org/projects/leyden/[Project Leyden], to help Java applications, especially ones which perform a lot of repetitive work at startup - to benefit from saving CPU resources spent into compilation.
 
 Not only, since the C2’s work affects the time to reach peak performance, what happens to the application runtime performance if C2 hasn’t completed its job?
