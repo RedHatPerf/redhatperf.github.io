@@ -1,6 +1,6 @@
 ---
 title: "Taming Performance Testing with qDup"
-date: 2025-07-16T00:00:00Z
+date: 2025-09-09T00:00:00Z
 categories: ['performance', 'methodology', 'CI/CD', 'automation']
 summary: 'This is the story of how we tamed cross-team collaboration performance testing by leveraging a tool called qDup to streamline complex test automation setups'
 image: 'superheroes-banner.png'
