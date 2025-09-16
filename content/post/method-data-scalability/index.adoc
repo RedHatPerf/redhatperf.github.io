@@ -1,0 +1,149 @@
+---
+title: "Sharing is (S)Caring: How Tiered Compilation Affects Java Application Scalability"
+date: 2025-08-07T00:00:00Z
+categories: ['performance', 'benchmarking', 'methodology']
+summary: 'Understand how Tiered Compilation impacts the scalability of Java applications in modern environments.'
+image: 'sharing_is_scaring.png'
+related: ['']
+authors:
+ - Francesco Nigro
+---
+# JVM Challenges in Containers
+
+Containers have revolutionized software deployment, offering lightweight, portable, and consistent environments. With orchestration platforms like Kubernetes, developers can efficiently deploy and scale applications across diverse infrastructures.
+
+However, containers pose unique challenges for applications with complex runtime requirements, such as those running on the Java Virtual Machine (JVM). The JVM, a cornerstone of enterprise software, was designed in an era when it could assume unrestricted access to system resources. Containers, on the other hand, abstract these resources and often impose limits on CPU, memory, and other critical parameters.
+
+While the JVM has evolved to better handle containerized environments — adding features like container resource detection — some components, like Just-In-Time (JIT) compilers (C1 and C2), remain sensitive to resource constraints. Misconfigurations or insufficient resources can significantly impact their efficiency, affecting application performance.
+
+To achieve optimal JVM performance in containers, developers must understand the underlying system and carefully configure resources. Containers simplify deployment but do not inherently address JVM-specific needs.
+
+This article explores how resource shortages impact Java application performance, focusing on the scalability challenges introduced by Tiered Compilation.
+
+# Understanding Tiered Compilation
+
+First, let’s recall a key mechanism employed by OpenJDK Hotspot to optimize the application’s code: Tiered Compilation.
+
+Tiered compilation in the HotSpot JVM balances application startup speed and runtime performance by using https://developers.redhat.com/articles/2021/06/23/how-jit-compiler-boosts-java-performance-openjdk[multiple levels] of code execution and optimization.
+Initially, it uses an **interpreter** for immediate execution. As methods are invoked frequently, it employs a fast compiler i.e. **C1** to generate native code.
+Over time, methods that are heavily used ("hot spots") are further optimized with the optimizing compiler i.e. **C2**, which applies advanced optimizations for maximum performance.
+
+This tiered approach ensures quick application responsiveness while progressively optimizing performance-critical code paths. The name "HotSpot" reflects this focus on dynamically identifying and optimizing hot spots in code execution for efficiency.
+
+What’s less known about tiered compilation is that the C2 compiler can be very CPU intensive and, when it doesn’t have enough resources, its activity could affect application performances including https://jpbempel.github.io/2020/05/22/startup-containers-tieredcompilation.html[startup time].
+This has led to different initiatives and efforts, like https://openjdk.org/projects/leyden/[Project Leyden], to help Java applications, especially ones which perform a lot of repetitive work at startup - to benefit from saving CPU resources spent into compilation.
+
+Not only, since the C2’s work affects the time to reach peak performance, what happens to the application runtime performance if C2 hasn’t completed its job?
+
+# The Role of MethodData in Tiered Compilation
+
+To understand the impact, we need to examine the transition from C1-compiled code to C2-level optimization. At Tier 3 (C1 full-profile compilation), methods are compiled into native code with telemetry data to guide C2 optimizations. This telemetry includes:
+
+- Method invocation counts
+- Loop iteration counts
+- Branch behavior
+- Type profiling for dynamic calls
+- And more...
+
+Telemetry is stored in https://wiki.openjdk.org/display/HotSpot/MethodData[MethodData], which contains counters for each method. These counters are updated concurrently by application threads, introducing potential scalability issues.
+
+The OpenJDK documentation highlights an important detail:
+
+```
+// All data in the profile is approximate. It is expected to be accurate
+// on the whole, but the system expects occasional inaccuracies, due to
+// counter overflow, multiprocessor races during data collection
+```
+
+This concurrent data collection can lead to performance bottlenecks, especially in high-traffic methods. Let’s explore the implications.
+
+# Sharing is (S)Caring
+
+To demonstrate the scalability issue, we use a micro-benchmark (link:MethodDataSharing.java[this benchmark]) with https://github.com/openjdk/jmh[JMH]. The benchmark focuses on a method with tight loops to highlight the cost of updating `MethodData` counters.
+
+In the following benchmarks, we control the maximum level of compilation available to the entire application (including the JMH infrastructure) via `-XX:TieredStopAtLevel=3`. This ensures that the benchmark stresses the `MethodData` counters by keeping the tier level fixed at 3, where methods are compiled into native code with telemetry data but without advanced optimizations from the C2 compiler. This setup isolates the impact of `MethodData` updates on performance.
+
+Running the benchmark with a single thread:
+
+```
+Benchmark                Mode  Cnt     Score   Error  Units
+MethodDataSharing.doFoo  avgt   20  1374.518 ± 0.676  ns/op
+```
+
+With two threads, performance degrades significantly:
+
+```
+Benchmark                Mode  Cnt      Score     Error  Units
+MethodDataSharing.doFoo  avgt   20  19115.045 ± 736.856  ns/op
+```
+
+Inspecting the assembly output reveals frequent updates to MethodData fields, which can trigger https://en.wikipedia.org/wiki/False_sharing[false sharing] among counters sharing the same cache line. False sharing occurs when multiple threads update data in the same cache line, causing unnecessary contention and slowing down execution.
+
+# NUMA Effects on Scalability
+
+Modern CPUs often use https://en.wikipedia.org/wiki/Non-uniform_memory_access[NUMA] architectures, where memory access costs vary depending on the node. Running the benchmark on two cores within the same NUMA node:
+
+```
+numactl --physcpubind 0,1 java -jar target/benchmark.jar MethodDataSharing -t 2 --jvmArgs="-XX:TieredStopAtLevel=3"
+
+Benchmark                Mode  Cnt     Score     Error  Units
+MethodDataSharing.doFoo  avgt   20  8662.030 ± 731.919  ns/op
+```
+
+Running on cores in different NUMA nodes:
+
+```
+numactl --physcpubind 0,8 java -jar target/benchmark.jar MethodDataSharing -t 2 --jvmArgs="-XX:TieredStopAtLevel=3"
+
+Benchmark                Mode  Cnt      Score      Error  Units
+MethodDataSharing.doFoo  avgt   20  16427.929 ± 1475.128  ns/op
+```
+
+Performance worsens due to increased cache coherency traffic and communication costs between nodes.
+
+# Implications for Containers
+
+In containerized environments, CPU quotas are often set without binding containers to specific NUMA nodes. This can exacerbate the scalability issues described above. Developers must carefully configure containers to avoid these pitfalls.
+
+To summarize:
+
+- Tier 3 compilation can introduce severe scalability problems, even with just two cores.
+- False sharing and NUMA effects can worsen performance.
+- Containers require thoughtful resource allocation to mitigate these issues.
+
+Understanding these challenges is key to optimizing Java application performance in modern environments.
+
+## How Can You Avoid or Fix This Scalability Issue?
+
+**TL;DR:**  
+Make sure your Java application has enough CPU resources to let the JVM complete its JIT compilation. If running in containers (like OpenShift), configure your pods to keep all CPU resources on a single NUMA node to avoid cross-node penalties.
+
+### Platform-level Solutions
+
+- **In OpenShift:**  
+  Use https://docs.openshift.com/container-platform/latest/nodes/topology-manager.html[Topology Manager] to ensure your pods run on CPUs within a single NUMA node. This reduces the performance hit caused by spreading CPU resources across multiple nodes.
+
+- **Other Kubernetes platforms:**  
+  Look for node/pod affinity or CPU pinning features in your orchestrator to keep your application’s CPUs local.
+
+### JVM and Resource Tuning
+
+- **Increase CPU quota/resources:**  
+  If your application is stuck at Tier 3 (suboptimal compilation), it likely means the JVM doesn't have enough CPU to fully optimize your code. Increase the CPU limits for your container or VM so the JVM can finish C2 (Tier 4) compilation. This will reduce the time your app spends running in the slower, telemetry-heavy tier.
+
+- **Know your workload:**  
+  Monitor your application's startup and peak load. Tune your container or VM resources so the JIT compiler isn't starved for CPU during these periods.
+
+### In Short
+
+- Don’t let your JVM run with too little CPU, especially during startup or peak load.
+- Pin your application to a single NUMA node in containerized environments to avoid unnecessary performance penalties.
+
+# Closing Note
+
+This topic gained attention after observing a real-world customer case where these scalability issues occurred.
+Following this, we engaged with the OpenJDK Team to discuss potential improvements.
+You can find more details in the discussion thread at https://mail.openjdk.org/pipermail/hotspot-dev/2025-February/100965.html.
+
+Additionally, a related study on this issue is available at https://ckirsch.github.io/publications/proceedings/MPLR24.pdf#page=117.
+While the study does not focus specifically on containerized applications, it provides valuable insights into the underlying scalability challenges.
