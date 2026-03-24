@@ -89,7 +89,7 @@ In this example, we’ll examine a real-world scenario that occurred while bench
 
 ### SUT CPU analyses
 
-We can start by looking for the “perf stat” for the SUT’ PID. "perf stat" is a powerful Linux command-line tool that
+We can start by looking for the “perf stat” for the SUT's application PID. "perf stat" is a powerful Linux command-line tool that
 gives you high-level statistics about a program's performance. It uses hardware performance counters in your CPU
 to measure things like instructions executed, CPU cycles, cache misses, and branch mispredictions.
 It's a great first step to understanding your application's behavior at a low level.
