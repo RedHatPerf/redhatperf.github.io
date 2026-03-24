@@ -23,7 +23,7 @@ we demonstrate how to identify CPU stalls, cache misses, and poor memory access 
 we show how profiling data can guide code optimizations and system configuration changes that lead to measurable
 improvements in Instruction Per Cycle (IPC) and overall system responsiveness.
 
-## Software Development Life Cycle
+== Software Development Life Cycle
 
 A *software developer* implements features based on defined requirements—such as creating multiple endpoints to solve a
 specific business problem. Once development is complete, the *performance engineering* team gathers SLAs from stakeholders
@@ -33,7 +33,7 @@ If a regression is found, the team receives feedback to address it.
 
 There is nothing wrong with this approach, but we can go even further.
 
-### Personas
+=== Personas
 
 *Software Developer*: A professional who designs, builds, tests, and maintains software applications or systems.
 
@@ -46,20 +46,20 @@ considered ready for General Availability (GA).
 bottlenecks. The process typically begins by identifying which resource—CPU, memory, disk, or network— the team has
 chosen to stress, guiding the analysis toward the root cause of any performance degradation.
 
-### Java Developer Persona Belt
+=== Java Developer Persona Belt
 
 * Software Developer: Eclipse IDE, IBM Semeru JDK
 * Performance Engineering: Hyperfoil and a web-based application
 * Profiler Performance Engineering: async-profiler, jfrconv, perf, sar
 
-## The USE Method
+== The USE Method
 
 According to Brendan Gregg, The **U**tilization **S**aturation and **E**rrors (USE) Method is a methodology for analyzing the
 performance of any system. It directs the construction of a checklist, which for server analysis can be used for
 quickly identifying resource bottlenecks or errors. It begins by posing questions, and then seeks answers, instead of
 beginning with given metrics (partial answers) and trying to work backwards.
 
-### Terminology definitions:
+=== Terminology definitions:
 
 The terminology definition is:
 
@@ -74,7 +74,7 @@ The metrics are usually expressed in the following terms:
 * *saturation*: as a queue length. eg, "the CPUs have an average run queue length of four".
 * *errors*: scalar counts. eg, "this network interface has had fifty late collisions".
 
-## The benchmark
+== The benchmark
 
 The benchmark scenario consists of three main components: a load generator, a System Under Test (SUT) running on an
 application server, and a database. The load generator initiates requests to various SUT endpoints, which in turn
@@ -83,11 +83,11 @@ warmup and steady state. During the warmup phase, the system gradually ramps up 
 period, aiming for a smooth transition into the steady state. This controlled increase helps stabilize the system
 before reaching the target injection rate for sustained testing.
 
-## Hand’s on
+== Hands-on
 
 In this example, we’ll examine a real-world scenario that occurred while benchmarking an application.
 
-### SUT CPU analyses
+=== SUT CPU analyses
 
 We can start by looking for the “perf stat” for the SUT's application PID. "perf stat" is a powerful Linux command-line tool that
 gives you high-level statistics about a program's performance. It uses hardware performance counters in your CPU
@@ -184,6 +184,6 @@ This overlap confirms the diagnosis: The application is not just "busy"; it is s
 our original top output wasn't due to complex calculation, but rather the CPU burning cycles while waiting for data
 to arrive from memory to satisfy the HashMap's pointer-chasing requirements.
 
-## Acknowledge
+== Acknowledgments
 
 All this work was guided and supervised by Francesco Nigro.
