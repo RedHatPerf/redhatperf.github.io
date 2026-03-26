@@ -103,9 +103,10 @@ Performance counter stats for process id '3724985':
 
 This metric indicates that 5.2 CPU cores are being utilized. For this test, we have a constraint of only 15 CPU cores
 available. Therefore, 5.2 ÷ 15 equals approximately 34%, meaning the CPU is busy 34% of the time. This suggests that
-the loader is not a highly utilized resource, so we could experiment by increasing its injection rate to raise the
-system load and observe the impact. However, this is not guaranteed to succeed, as other bottlenecks might limit the
-outcome. In our case, the loader can sustain that increase in the injection rate, and now the perf stat output for the SUT is:
+the SUT is not a highly utilized resource. Since the SUT CPU utilization was only at 34%, we had plenty of headroom
+to experiment. We decided to drive a higher load by doubling the injection rate of the loader to observe the impact.
+However, this is not guaranteed to succeed, as other bottlenecks might limit the outcome. In our case, the loader
+could sustain the 2x increase in injection rate, and the new `perf stat` output for the SUT is:
 
 ```
 Performance counter stats for process id '3854032':
