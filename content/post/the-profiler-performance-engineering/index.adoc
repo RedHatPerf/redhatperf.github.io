@@ -1,5 +1,5 @@
 ---
-title: "The Profiler Performance Engineering"
+title: "Profiler Performance Engineering: A Story of What It Does and Doesn't Show"
 date: 2025-12-04T00:00:00Z
 categories: ['performance', 'methodology']
 summary: 'Learn how to properly benchmark an application'
