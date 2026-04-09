@@ -50,7 +50,7 @@ A https://www.brendangregg.com/flamegraphs.html[differential flamegraph] of the 
 
 image::diff-flamegraph-gap.png[Differential flamegraph: perf-lab vs local]
 
-Red frames appear more in the local run; blue frames appear more on the perf-lab. The red hotspots are all in the kernel network path: `tcp_sendmsg`, `ip_output`, softirq `net_rx_action`, and firewall evaluation (`nf_hook_slow`, `nft_do_chain`). The local environment is doing **real network I/O work** — sending and receiving TCP packets through extra hops — that the perf-lab doesn't need to do.
+Red frames appear more in the local run; blue frames appear more on the perf-lab. The brightest red hotspots are kernel spin locks (`_raw_spin_unlock_irqrestore`), nftables firewall evaluation (`nft_do_chain`, `nft_meta_get_eval`), and TCP packet processing (`tcp_clean_rtx_queue`, `skb_defer_free_flush`). The blue band at the bottom is application code that gets more CPU on the perf-lab — because the kernel isn't eating it. **The local kernel is spending cycles on network packet processing and firewall rules that the perf-lab doesn't need.**
 
 == Isolating the network layer with pgbench
 
@@ -140,7 +140,9 @@ A second differential flamegraph — this time comparing the local default (past
 
 image::diff-flamegraph.png[Differential flamegraph: default pasta vs host networking]
 
-Red means more CPU in the default (pasta) run; blue means more CPU with host networking. The red stacks that dominated the first flamegraph — `tcp_sendmsg`, `ip_output`, `net_rx_action`, `nf_hook_slow` — have disappeared. With `--network=host`, the app and postgres share the same network namespace; packets never leave the kernel.
+Red means more CPU in the default (pasta) run; blue means more CPU with host networking. The red stacks that dominated the first flamegraph — `_raw_spin_unlock_irqrestore`, `nft_do_chain`, `tcp_clean_rtx_queue` — have disappeared.
+
+**With `--network=host`, the app and postgres share the same network namespace; packets never leave the kernel.**
 
 == Takeaways
 
