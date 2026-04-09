@@ -8,29 +8,45 @@ authors:
   - Francesco Nigro
 ---
 
-A community member ran our https://github.com/quarkusio/spring-quarkus-perf-comparison[Quarkus vs Spring CRUD benchmark] on their bare-metal Fedora workstation and asked: "Why do I see only 1.19x instead of 2x?" Our perf-lab shows Quarkus at 2.08x Spring's throughput, but locally the gap nearly disappears. This post walks through the investigation that found the culprit.
+A community member ran our https://github.com/quarkusio/spring-quarkus-perf-comparison[Quarkus vs Spring CRUD benchmark] on their bare-metal Fedora workstation and asked:
+
+[quote]
+____
+[.lead]
+_Why do I see only 1.19x instead of 2x?_
+____
+
+**Our perf-lab shows Quarkus at 2.08x Spring's throughput, but locally the gap nearly disappears.**
+
+This post walks through the investigation that found the culprit.
 
 == The gap
 
-The benchmark is a REST/CRUD application backed by PostgreSQL. The app runs on the host, postgres in a rootless podman container. Each HTTP request executes 2 SQL queries (confirmed via `pg_stat_statements`).
+The benchmark is a REST/CRUD application backed by PostgreSQL. The app runs on the host, postgres in a rootless podman container. Each HTTP request executes 2 SQL queries (confirmed via https://www.postgresql.org/docs/current/pgstatstatements.html[pg_stat_statements]).
 
-[cols="2,1,1,1", options="header"]
+image::throughput-gap.svg[Throughput comparison: Local vs Perf-lab]
+
+Spring delivers roughly the same throughput in both environments (~12-13K TPS). Quarkus swings from 15.5K to 24.5K -- it is being held back locally. **Something between the app and postgres is penalizing Quarkus specifically.**
+
+== mpstat: where is the CPU going?
+
+The benchmark collects https://man7.org/linux/man-pages/man1/mpstat.1.html[mpstat] data during every run — per-CPU utilization split into `%usr` (application code), `%sys` (kernel), `%soft` (softirq, mainly network packet processing), and `%idle`. This is part of our https://github.com/quarkusio/spring-quarkus-perf-comparison/issues/62[active benchmarking practice]: observing the system _while it runs_, not just collecting final TPS numbers.
+
+Both environments run Quarkus at 2.3GHz with the same workload and CPU pinning. The mpstat profiles could not be more different:
+
+[cols="2,1,1,1,1", options="header"]
 |===
-| Environment | Quarkus TPS | Spring TPS | Ratio
+| Environment | %usr | %sys | %soft | %idle
 
-| Local Fedora workstation | 15,504 | 13,062 | 1.19x
-| Perf-lab (RHEL 9.6) | 24,472 | 11,783 | 2.08x
+| Local (Fedora, 15,504 TPS) | 39-50% | 34-41% | 9-17% | 3-5%
+| Perf-lab (RHEL, 24,472 TPS) | 87-94% | 5-11% | 0-2% | 0%
 |===
 
-Spring delivers roughly the same throughput in both environments (~12-13K TPS). Quarkus swings from 15.5K to 24.5K -- it is being held back locally. Something between the app and postgres is penalizing Quarkus specifically.
-
-== mpstat: saturated, but on what?
-
-`mpstat` on the 4 app CPUs during Quarkus steady-state showed `%sys` at 38-44% and `%soft` (softirq) at 10-17%, with only 2-3% idle. The kernel was consuming more than half the cycles. That much kernel overhead for a CRUD app talking to a local database felt wrong — so we isolated the network path next.
+`%usr` is time running application code. `%sys` is time in the kernel. On perf-lab, over 85% of CPU goes to the application. Locally, nearly half goes to the kernel — and the application has idle CPU it cannot use. Same application, same clock speed, same workload: **the local environment is burning CPU in the kernel instead of running the app.** We isolated the network path next.
 
 == Isolating the network layer with pgbench
 
-To confirm the network path was the bottleneck, we ran `pgbench` with the same 2-query workload (50 clients, prepared statements, 30 seconds) over different network paths:
+To confirm the network path was the bottleneck, we ran `pgbench` with the same 2-query workload (50 clients, prepared statements, 30 seconds) over different network paths. We also tested with Fedora's https://wiki.nftables.org/[nftables] firewall disabled, since the JFR flamegraph showed `nft_do_chain` in the kernel stacks:
 
 [cols="2,1,1", options="header"]
 |===
@@ -41,15 +57,15 @@ To confirm the network path was the bottleneck, we ran `pgbench` with the same 2
 | Host -> container (`--network=host`) | 53,262 | 0.47ms
 |===
 
-With `--network=host`, statement latency drops to 0.47ms. pasta adds ~0.9ms per statement (1.38 - 0.47ms). With 2 statements per HTTP request, that is ~1.8ms of networking latency added to every request.
+With `--network=host`, statement latency drops from 1.38ms to 0.47ms — a 3x reduction. With 2 statements per HTTP request, that overhead adds up on every request.
 
 == The flamegraph tells the story
 
-JFR CPU profiles from the default and host-networking Quarkus runs were compared using a https://www.brendangregg.com/flamegraphs.html[differential flamegraph]. Red frames appear more in the default (pasta) configuration; blue frames appear more with host networking.
+JFR CPU profiles (collected via https://github.com/async-profiler/async-profiler[async-profiler]) from the default and host-networking Quarkus runs were compared using a https://www.brendangregg.com/flamegraphs.html[differential flamegraph]. Red frames appear more in the default (pasta) configuration; blue frames appear more with host networking.
 
 image::diff-flamegraph.png[Differential flamegraph: pasta vs host networking]
 
-The red stacks are dominated by kernel networking: `tcp_sendmsg`, `ip_output`, `nf_hook_slow`, `nft_do_chain`, and softirq `net_rx_action`. These shrink dramatically with `--network=host`.
+Red means more CPU in the default (pasta) run; blue means more CPU with host networking. The red stacks split into two groups: the pasta proxy overhead — extra `tcp_sendmsg`, `ip_output`, and softirq `net_rx_action` from the two additional kernel/userspace boundary crossings — and the firewall overhead — `nf_hook_slow` and `nft_do_chain` from Fedora's 973 nftables rules. Both disappear with `--network=host`, because the app and postgres share the same network namespace and packets never leave the kernel.
 
 Per-request CPU cost confirms the picture:
 
@@ -62,7 +78,7 @@ Per-request CPU cost confirms the picture:
 | Perf-lab (24,472 TPS) | 0.158
 |===
 
-With host networking, per-request cost matches the perf-lab exactly: 0.158 ms/req.
+With host networking, per-request cost **matches the perf-lab exactly**: 0.158 ms/req.
 
 == Root cause: pasta, the userspace TCP proxy
 
@@ -78,7 +94,9 @@ With --network=host:
 
 Every JDBC packet traverses two extra kernel/userspace boundary crossings plus a userspace copy in the pasta process. For a chatty protocol like JDBC with small, frequent packets, this is devastating.
 
-On top of pasta, Fedora's `firewalld` maintains 973 nftables rules that every packet traverses (`nf_hook_slow` -> `nft_do_chain`). Disabling the firewall recovers another ~10% throughput. This matches findings from https://talawah.io/blog/extreme-http-performance-tuning-one-point-two-million/[prior work on extreme HTTP tuning] where iptables `nf_hook_slow` consumed ~18% of CPU in benchmarks.
+=== Bonus: nftables firewall overhead
+
+Fedora's `firewalld` maintains 973 https://wiki.nftables.org/[nftables] rules that every packet traverses (`nf_hook_slow` -> `nft_do_chain`). This is independent of pasta — it affects any network traffic on the host. Disabling the firewall recovers another ~10% throughput. This matches findings from https://talawah.io/blog/extreme-http-performance-tuning-one-point-two-million/[prior work on extreme HTTP tuning] where iptables `nf_hook_slow` consumed ~18% of CPU in benchmarks.
 
 == Why Quarkus is affected but Spring is not
 
@@ -91,13 +109,13 @@ On top of pasta, Fedora's `firewalld` maintains 973 nftables rules that every pa
 | Perf-lab (RHEL 9.6) | 24,472 | 11,783 | 2.08x
 |===
 
-Removing pasta boosts Quarkus by 55% but Spring by only 2.3%. The reason is where each framework spends its CPU time.
+Removing pasta boosts Quarkus by 55% but Spring by only 2.3%. **The reason is where each framework spends its CPU time.**
 
-Quarkus is I/O-efficient: its per-request framework overhead is small, so DB round-trip latency dominates the profile. When pasta adds 0.9ms per statement, that overhead becomes a large fraction of Quarkus's total per-request cost. Remove pasta, and Quarkus unlocks all the CPU it was wasting on proxy overhead.
+**Quarkus is I/O-efficient**: its per-request framework overhead is small, so DB round-trip latency dominates the profile. When pasta adds 0.9ms per statement, that overhead becomes a large fraction of Quarkus's total per-request cost. Remove pasta, and Quarkus unlocks all the CPU it was wasting on proxy overhead.
 
-Spring is CPU-bound on framework overhead: AOP proxies, deeper call stacks, 15% more instructions per request at 17% worse IPC (0.79 vs 0.94). DB latency is a smaller fraction of Spring's per-request cost, so removing pasta barely moves the needle.
+**Spring is CPU-bound on framework overhead**: deeper call stacks and more instructions per request mean DB latency is a smaller fraction of Spring's per-request cost. Removing pasta barely moves the needle.
 
-In other words, pasta was masking Quarkus's I/O efficiency advantage -- the very thing that makes it 2x faster on the perf-lab.
+In other words, **pasta was masking Quarkus's I/O efficiency advantage** -- the very thing that makes it 2x faster on the perf-lab.
 
 == The fix
 
@@ -114,11 +132,18 @@ Run the postgres container with `--network=host` instead of port-mapping (`-p 54
 | Perf-lab (RHEL 9.6) | 24,472 | 100% | 2.08x
 |===
 
-With host networking, the local Fedora workstation matches the perf-lab. The remaining gap to the perf-lab's 2.08x ratio is accounted for by nftables (Fedora's 973 rules vs RHEL's minimal ruleset) and minor kernel differences.
+**With host networking, the local Fedora workstation matches the perf-lab.** The remaining gap to the perf-lab's 2.08x ratio is accounted for by nftables (Fedora's 973 rules vs RHEL's minimal ruleset) and minor kernel differences.
 
 == Takeaways
 
-* **A benchmark that doesn't stress what it claims to stress will deliver misleading results.** This is a textbook case of what Brendan Gregg calls https://www.brendangregg.com/activebenchmarking.html[active benchmarking]: "You benchmark A, but actually measure B, and conclude you've measured C." We thought we were measuring framework throughput, but we were actually measuring pasta proxy overhead. Only by observing the system _while the benchmark was running_ (mpstat, pgbench, flamegraphs) did the real bottleneck emerge. The https://quarkus.io/blog/new-benchmarks/[published benchmark] was designed to isolate framework performance from infrastructure variables -- but rootless container networking silently violated that isolation.
+* **A benchmark that doesn't stress what it claims to stress will deliver misleading results.** This is a textbook case of what Brendan Gregg calls https://www.brendangregg.com/activebenchmarking.html[active benchmarking]:
++
+[quote, Brendan Gregg]
+____
+_You benchmark A, but actually measure B, and conclude you've measured C._
+____
++
+We thought we were measuring framework throughput, but we were actually measuring pasta proxy overhead. Only by observing the system _while the benchmark was running_ — https://man7.org/linux/man-pages/man1/mpstat.1.html[mpstat], pgbench, flamegraphs, as https://github.com/quarkusio/spring-quarkus-perf-comparison/issues/62[required by our benchmarking practice] — did the real bottleneck emerge. The https://quarkus.io/blog/new-benchmarks/[published benchmark] was designed to isolate framework performance from infrastructure variables -- but rootless container networking silently violated that isolation.
 
 * **The impact is asymmetric.** I/O-efficient frameworks like Quarkus are disproportionately penalized because DB latency is a larger fraction of their per-request cost. CPU-bound frameworks like Spring are barely affected, which compresses the apparent gap.
 
@@ -140,4 +165,4 @@ Our findings are consistent with several known issues in the podman/pasta ecosys
 
 * **Traffic stalls under sustained load** -- TCP downloads through pasta start normally then halt, with pasta pinned at high CPU. (https://github.com/containers/podman/issues/17703[Podman Issue #17703])
 
-The official https://github.com/containers/podman/blob/main/docs/tutorials/performance.md[Podman performance tutorial] documents `--network=host` and socket activation as workarounds for network-sensitive workloads.
+* The official https://github.com/containers/podman/blob/main/docs/tutorials/performance.md[Podman performance tutorial] documents `--network=host` and socket activation as workarounds for network-sensitive workloads.
