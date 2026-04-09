@@ -49,13 +49,12 @@ To confirm the network path was the bottleneck, we ran `pgbench` with the same 2
 |===
 | Network path | TPS | Stmt latency
 
-| Inside container (unix socket) | 45,159 | 0.48ms
 | Host -> container (pasta + nftables) | 18,106 | 1.38ms
 | Host -> container (pasta, no nftables) | 20,402 | 1.22ms
 | Host -> container (`--network=host`) | 53,262 | 0.47ms
 |===
 
-The pasta proxy adds ~0.9ms per SQL statement. With 2 statements per HTTP request, that is 1.8ms of pure networking overhead per request -- at 15,504 TPS, that accounts for 28 CPU-ms per second wasted on proxy overhead, per connection.
+With `--network=host`, pgbench achieves 0.47ms per statement -- the baseline without proxy overhead. The pasta proxy adds ~0.9ms on top of that (1.38ms vs 0.47ms). With 2 statements per HTTP request, that is 1.8ms of pure networking overhead per request -- at 15,504 TPS, that accounts for 28 CPU-ms per second wasted on proxy overhead, per connection.
 
 == The flamegraph tells the story
 
