@@ -26,9 +26,7 @@ Spring delivers roughly the same throughput in both environments (~12-13K TPS). 
 
 == mpstat: saturated, but on what?
 
-`mpstat` on the 4 app CPUs during Quarkus steady-state showed `%sys` at 38-44% and `%soft` (softirq) at 10-17%, with only 2-3% idle. The kernel was consuming more than half the cycles, and the CPUs were nearly saturated.
-
-But here's what caught our attention: running the same pgbench workload over pure loopback (`--network=host`) produced similar `%soft` levels (15-17%) at much higher throughput (48K TPS) -- with 37% idle headroom. The softirq rate per request was comparable, but with pasta the CPUs were pinned at 97% utilization delivering only 18K TPS. The extra `%sys` was the clue: something in the network path was burning CPU far beyond what loopback alone costs.
+`mpstat` on the 4 app CPUs during Quarkus steady-state showed `%sys` at 38-44% and `%soft` (softirq) at 10-17%, with only 2-3% idle. The kernel was consuming more than half the cycles. That much kernel overhead for a CRUD app talking to a local database felt wrong — so we isolated the network path next.
 
 == Isolating the network layer with pgbench
 
