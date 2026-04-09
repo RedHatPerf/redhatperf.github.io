@@ -1,0 +1,122 @@
+---
+title: "The Hidden Cost of Rootless Container Networking on Java Benchmark Throughput"
+date: 2026-04-10T00:00:00Z
+categories: ['performance', 'benchmarking', 'containers']
+summary: 'How podman pasta proxy silently cut benchmark throughput by 40%, and the USE method investigation that found it'
+image: 'diff-flamegraph.png'
+authors:
+  - Francesco Nigro
+---
+
+A community member ran our Quarkus vs Spring CRUD benchmark on their bare-metal Fedora workstation and asked: "Why do I see a 2x ratio instead of 1.09x?" Same app, same 2.3 GHz clock, same podman setup -- but 40% less throughput than the perf-lab. This post walks through the USE method investigation that found the culprit: a userspace TCP proxy hidden inside rootless podman.
+
+== The gap
+
+The benchmark is a REST/CRUD application backed by PostgreSQL, running on the host, with postgres in a rootless podman container. Two SQL queries per HTTP request (confirmed via `pg_stat_statements`).
+
+[cols="2,1,1", options="header"]
+|===
+| Configuration | TPS | vs Perf-lab
+
+| Default (pasta + nftables) | 15,504 | 63.4%
+| `--network=host` on postgres | 24,116 | 98.5%
+| Perf-lab (RHEL 9.6, kernel 5.14) | 24,472 | 100%
+|===
+
+Something between the app and postgres was eating 36% of our throughput.
+
+== Utilization: mpstat reveals the symptom
+
+The USE method (Utilization, Saturation, Errors) starts with utilization. `mpstat` on the 4 app CPUs during steady-state load showed:
+
+[cols="1,1,1,1,1", options="header"]
+|===
+| CPU | %usr | %sys | %soft | %idle
+
+| 0 | 41.8 | 43.9 | 10.2 | 2.0
+| 1 | 35.4 | 42.4 | 17.2 | 3.0
+| 2 | 46.5 | 38.4 | 10.1 | 3.0
+| 3 | 43.0 | 41.0 | 11.0 | 3.0
+|===
+
+The `%soft` column stands out: 10-17% of CPU time spent in softirq processing (network packet handling). The `%sys` at 38-44% is also unusually high. CPUs are saturated (2-3% idle), but not doing application work -- the kernel is consuming half the cycles.
+
+== Isolating the network layer with pgbench
+
+To confirm the network path was the bottleneck, we ran `pgbench` with the same 2-query workload (50 clients, prepared statements, 30 seconds) over different network paths:
+
+[cols="2,1,1", options="header"]
+|===
+| Network path | TPS | Stmt latency
+
+| Inside container (unix socket) | 45,159 | 0.48ms
+| Host -> container (pasta + nftables) | 18,106 | 1.38ms
+| Host -> container (pasta, no nftables) | 20,402 | 1.22ms
+| Host -> container (`--network=host`) | 53,262 | 0.47ms
+|===
+
+The pasta proxy adds ~0.9ms per SQL statement. With 2 statements per HTTP request, that is 1.8ms of pure networking overhead per request -- at 15,504 TPS, that accounts for 28 CPU-ms per second wasted on proxy overhead, per connection.
+
+== The flamegraph tells the story
+
+JFR CPU profiles (4000-sample budget) from the default and host-networking runs were compared using a differential flamegraph. Red frames appear more in the default (pasta) configuration; blue frames appear more with host networking.
+
+image::diff-flamegraph.png[Differential flamegraph: pasta vs host networking]
+
+The red stacks are dominated by kernel networking functions: `tcp_sendmsg`, `ip_output`, `nf_hook_slow`, `nft_do_chain`, and softirq `net_rx_action` processing. These shrink dramatically with `--network=host`.
+
+Per-request CPU cost confirms the picture:
+
+[cols="2,1", options="header"]
+|===
+| Configuration | CPU ms/req
+
+| Default pasta (15,504 TPS) | 0.231
+| Host networking (24,116 TPS) | 0.158
+| Perf-lab (24,472 TPS) | 0.158
+|===
+
+Host networking per-request cost matches the perf-lab exactly: 0.158 ms/req.
+
+== Root cause: pasta, the userspace TCP proxy
+
+Rootless podman on Fedora uses https://passt.top/passt/[pasta (passt)] to forward container ports. Unlike rootful podman (which uses kernel-level port forwarding), pasta is a userspace process that proxies every TCP packet:
+
+----
+With pasta (default rootless):
+  App  -->  kernel  -->  pasta (userspace)  -->  kernel  -->  container netns  -->  postgres
+
+With --network=host:
+  App  -->  kernel  -->  postgres (same network namespace)
+----
+
+Every JDBC packet traverses two extra kernel/userspace boundary crossings plus a userspace copy in the pasta process. For a chatty protocol like JDBC with small packets, this is devastating.
+
+On top of pasta, Fedora's `firewalld` maintains 973 nftables rules that every packet must traverse (`nf_hook_slow` -> `nft_do_chain`). Disabling the firewall (`sudo systemctl stop firewalld && sudo nft flush ruleset`) recovers another ~10% throughput. This matches findings from https://talawah.io/blog/extreme-http-performance-tuning-one-point-two-million/[prior work on extreme HTTP tuning] where iptables `nf_hook_slow` consumed ~18% of CPU in benchmarks.
+
+== The fix and verification
+
+The fix is straightforward: run the postgres container with `--network=host` instead of port-mapping (`-p 5432:5432`). We added a `DB_HOST_NETWORK=true` environment variable to the benchmark's `infra.sh` script.
+
+[cols="2,1,1", options="header"]
+|===
+| Configuration | TPS | vs Perf-lab
+
+| Default (pasta + nftables) | 15,504 | 63.4%
+| No nftables only | 16,105 | 65.8%
+| `--network=host` | 24,116 | 98.5%
+| `--network=host` + no nftables | 26,039 | 106.4%
+| Perf-lab (RHEL 9.6) | 24,472 | 100%
+|===
+
+With host networking, the local Fedora workstation matches the perf-lab. Adding nftables removal pushes it 6% beyond -- the perf-lab's RHEL 9.6 has a minimal firewall ruleset.
+
+== Takeaways
+
+* **Rootless container networking can silently dominate benchmark results.** The pasta proxy added 0.9ms per SQL statement -- invisible unless you measure the network path independently.
+
+* **The USE method works.** mpstat -> pgbench isolation -> flamegraphs found the root cause in hours, not days.
+
+* **Check your networking path.** Run `podman info | grep rootlessNetworkCmd` to see which backend your system uses. If it says `pasta` and your benchmark talks to a containerized database, consider `--network=host` for the database container.
+
+* **Firewall rules matter at scale.** Nearly 1000 nftables rules cost ~10% throughput on a chatty workload. For benchmarking, consider temporarily disabling the firewall or using a minimal ruleset.
