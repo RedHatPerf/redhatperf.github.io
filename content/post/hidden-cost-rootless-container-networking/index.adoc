@@ -96,13 +96,11 @@ Fedora's `firewalld` maintains 973 https://wiki.nftables.org/[nftables] rules th
 | Perf-lab (RHEL 9.6) | 24,472 | 11,783 | 2.08x
 |===
 
-Removing pasta boosts Quarkus by 55% but Spring by only 2.3%. **The reason is where each framework spends its CPU time.**
+Removing pasta boosts Quarkus by 55% but Spring by only 2.3%. **The same absolute overhead hits the efficient framework harder.**
 
-**Quarkus is I/O-efficient**: its per-request framework overhead is small, so DB round-trip latency dominates the profile. When pasta adds 0.9ms per statement, that overhead becomes a large fraction of Quarkus's total per-request cost. Remove pasta, and Quarkus unlocks all the CPU it was wasting on proxy overhead.
+Pasta adds ~0.073 ms of kernel CPU per request (the difference between 0.231 and 0.158 ms/req). For Quarkus, whose framework cost is just 0.158 ms/req, that overhead consumes **46% of its CPU budget**. For Spring, whose framework cost is ~0.300 ms/req, the same overhead is only **~24%**. The more CPU-efficient your framework is, the more you feel the infrastructure tax.
 
-**Spring is CPU-bound on framework overhead**: deeper call stacks and more instructions per request mean DB latency is a smaller fraction of Spring's per-request cost. Removing pasta barely moves the needle.
-
-In other words, **pasta was masking Quarkus's I/O efficiency advantage** -- the very thing that makes it 2x faster on the perf-lab.
+In other words, **pasta was masking Quarkus's CPU efficiency advantage** -- the very thing that makes it 2x faster on the perf-lab.
 
 == The fix
 
