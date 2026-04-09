@@ -42,11 +42,19 @@ Both environments run Quarkus at 2.3GHz with the same workload and CPU pinning. 
 | Perf-lab (RHEL, 24,472 TPS) | 87-94% | 5-11% | 0-2% | 0%
 |===
 
-`%usr` is time running application code. `%sys` is time in the kernel. On perf-lab, over 85% of CPU goes to the application. Locally, nearly half goes to the kernel — and the application has idle CPU it cannot use. Same application, same clock speed, same workload: **the local environment is burning CPU in the kernel instead of running the app.** We isolated the network path next.
+`%usr` is time running application code. `%sys` is time in the kernel. On perf-lab, over 85% of CPU goes to the application. Locally, nearly half goes to the kernel — and the application has idle CPU it cannot use. Same application, same clock speed, same workload: **the local environment is burning CPU in the kernel instead of running the app.**
+
+== Where is the kernel time going?
+
+A https://www.brendangregg.com/flamegraphs.html[differential flamegraph] of the JFR CPU profiles (collected via https://github.com/async-profiler/async-profiler[async-profiler]) from the perf-lab and local Quarkus runs shows exactly where the extra kernel time is spent:
+
+image::diff-flamegraph-gap.png[Differential flamegraph: perf-lab vs local]
+
+Red frames appear more in the local run; blue frames appear more on the perf-lab. The red hotspots are all in the kernel network path: `tcp_sendmsg`, `ip_output`, softirq `net_rx_action`, and firewall evaluation (`nf_hook_slow`, `nft_do_chain`). The local environment is doing **real network I/O work** — sending and receiving TCP packets through extra hops — that the perf-lab doesn't need to do.
 
 == Isolating the network layer with pgbench
 
-To confirm the network path was the bottleneck, we ran `pgbench` with the same 2-query workload (50 clients, prepared statements, 30 seconds) over different network paths. We also tested with Fedora's https://wiki.nftables.org/[nftables] firewall disabled, since the JFR flamegraph showed `nft_do_chain` in the kernel stacks:
+To confirm the network path was the bottleneck, we ran `pgbench` with the same 2-query workload (50 clients, prepared statements, 30 seconds) over different network paths. We also tested with Fedora's https://wiki.nftables.org/[nftables] firewall disabled, since the flamegraph showed `nft_do_chain` in the kernel stacks:
 
 [cols="2,1,1", options="header"]
 |===
@@ -58,27 +66,6 @@ To confirm the network path was the bottleneck, we ran `pgbench` with the same 2
 |===
 
 With `--network=host`, statement latency drops from 1.38ms to 0.47ms — a 3x reduction. With 2 statements per HTTP request, that overhead adds up on every request.
-
-== The flamegraph tells the story
-
-JFR CPU profiles (collected via https://github.com/async-profiler/async-profiler[async-profiler]) from the default and host-networking Quarkus runs were compared using a https://www.brendangregg.com/flamegraphs.html[differential flamegraph]. Red frames appear more in the default (pasta) configuration; blue frames appear more with host networking.
-
-image::diff-flamegraph.png[Differential flamegraph: pasta vs host networking]
-
-Red means more CPU in the default (pasta) run; blue means more CPU with host networking. The red stacks split into two groups: the pasta proxy overhead — extra `tcp_sendmsg`, `ip_output`, and softirq `net_rx_action` from the two additional kernel/userspace boundary crossings — and the firewall overhead — `nf_hook_slow` and `nft_do_chain` from Fedora's 973 nftables rules. Both disappear with `--network=host`, because the app and postgres share the same network namespace and packets never leave the kernel.
-
-Per-request CPU cost confirms the picture:
-
-[cols="2,1", options="header"]
-|===
-| Configuration | CPU ms/req
-
-| Default pasta (15,504 TPS) | 0.231
-| Host networking (24,116 TPS) | 0.158
-| Perf-lab (24,472 TPS) | 0.158
-|===
-
-With host networking, per-request cost **matches the perf-lab exactly**: 0.158 ms/req.
 
 == Root cause: pasta, the userspace TCP proxy
 
@@ -133,6 +120,27 @@ Run the postgres container with `--network=host` instead of port-mapping (`-p 54
 |===
 
 **With host networking, the local Fedora workstation matches the perf-lab.** The remaining gap to the perf-lab's 2.08x ratio is accounted for by nftables (Fedora's 973 rules vs RHEL's minimal ruleset) and minor kernel differences.
+
+Per-request CPU cost confirms the picture:
+
+[cols="2,1", options="header"]
+|===
+| Configuration | CPU ms/req
+
+| Default pasta (15,504 TPS) | 0.231
+| Host networking (24,116 TPS) | 0.158
+| Perf-lab (24,472 TPS) | 0.158
+|===
+
+With host networking, per-request cost **matches the perf-lab exactly**: 0.158 ms/req.
+
+== Confirming the fix
+
+A second differential flamegraph — this time comparing the local default (pasta) run with the local `--network=host` run — confirms the overhead is gone:
+
+image::diff-flamegraph.png[Differential flamegraph: default pasta vs host networking]
+
+Red means more CPU in the default (pasta) run; blue means more CPU with host networking. The red stacks that dominated the first flamegraph — `tcp_sendmsg`, `ip_output`, `net_rx_action`, `nf_hook_slow` — have disappeared. With `--network=host`, the app and postgres share the same network namespace; packets never leave the kernel.
 
 == Takeaways
 
