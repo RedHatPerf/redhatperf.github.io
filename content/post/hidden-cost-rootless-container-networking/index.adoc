@@ -100,7 +100,7 @@ Fedora's `firewalld` maintains 973 https://wiki.nftables.org/[nftables] rules th
 
 Removing pasta boosts Quarkus by 55% but Spring by only 2.3%. **The same absolute overhead hits the efficient framework harder.**
 
-Pasta adds ~0.073 ms of kernel CPU per request (the difference between 0.231 and 0.158 ms/req). For Quarkus, whose framework cost is just 0.158 ms/req, that overhead consumes **46% of its CPU budget**. For Spring, whose framework cost is ~0.233 ms/req, the same overhead is **31%**. When your framework already spends most of its CPU on its own code, saving a few cycles on networking matters less.
+Pasta adds ~0.073 ms of kernel CPU per request to Quarkus (the difference between 0.231 and 0.158 ms/req) — that's **46% on top of its framework cost**. Quarkus is CPU-saturated, so every freed cycle translates directly to more requests. Spring spends far more CPU in its own framework code, so saving a small fraction of cycles on networking simply cannot help.
 
 **The more CPU-efficient your framework is, the more you feel the infrastructure tax.**
 
