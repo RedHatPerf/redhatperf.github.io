@@ -52,7 +52,7 @@ image::diff-flamegraph-gap.png[Differential flamegraph: perf-lab vs local, link=
 
 Red frames appear more in the local run; blue frames appear more on the perf-lab. The brightest red hotspots are kernel spin locks (`_raw_spin_unlock_irqrestore`), nftables firewall evaluation (`nft_do_chain`, `nft_meta_get_eval`), and TCP packet processing (`tcp_clean_rtx_queue`, `skb_defer_free_flush`). The blue band at the bottom is application code that gets more CPU on the perf-lab — because the kernel isn't eating it. **The local kernel is spending cycles on network packet processing and firewall rules that the perf-lab doesn't need.**
 
-The brightest red frame — `_raw_spin_unlock_irqrestore` — is worth a closer look. The stack trace shows it's triggered by Agroal (Quarkus's connection pool) returning a JDBC connection after a query: `ConnectionPool.returnConnectionHandler` → `LinkedTransferQueue.tryTransfer` → `LockSupport.unpark` → kernel `futex_wake` → `try_to_wake_up` → spin lock. With pasta adding latency, connections are held longer, more threads pile up waiting for a connection, and every return triggers a `futex_wake` to unpark a waiter. The network overhead doesn't just add direct cost — it cascades through the connection pool, amplifying the kernel time.
+The brightest red frame — `_raw_spin_unlock_irqrestore` — is worth a closer look. The stack trace shows it's triggered by Agroal (Quarkus's connection pool) returning a JDBC connection after a query: `ConnectionPool.returnConnectionHandler` → `LinkedTransferQueue.tryTransfer` → `LockSupport.unpark` → kernel `futex_wake` → `try_to_wake_up` → spin lock. If network latency is higher, connections are held longer, more threads pile up waiting for a connection, and every return triggers a `futex_wake` to unpark a waiter. Network overhead doesn't just add direct cost — it cascades through the connection pool, amplifying the kernel time.
 
 == Isolating the network layer with pgbench
 
@@ -100,7 +100,7 @@ Fedora's `firewalld` maintains 973 https://wiki.nftables.org/[nftables] rules th
 
 Removing pasta boosts Quarkus by 55% but Spring by only 2.3%. **The same absolute overhead hits the efficient framework harder.**
 
-Pasta adds ~0.073 ms of kernel CPU per request (the difference between 0.231 and 0.158 ms/req). For Quarkus, whose framework cost is just 0.158 ms/req, that overhead consumes **46% of its CPU budget**. For Spring, whose framework cost is ~0.300 ms/req, the same overhead is only **~24%**. When your framework already spends most of its CPU on its own code, saving a few cycles on networking barely matters.
+Pasta adds ~0.073 ms of kernel CPU per request (the difference between 0.231 and 0.158 ms/req). For Quarkus, whose framework cost is just 0.158 ms/req, that overhead consumes **46% of its CPU budget**. For Spring, whose framework cost is ~0.233 ms/req, the same overhead is **31%**. When your framework already spends most of its CPU on its own code, saving a few cycles on networking matters less.
 
 **The more CPU-efficient your framework is, the more you feel the infrastructure tax.**
 
