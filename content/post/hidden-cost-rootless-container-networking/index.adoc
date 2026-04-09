@@ -52,6 +52,8 @@ image::diff-flamegraph-gap.png[Differential flamegraph: perf-lab vs local]
 
 Red frames appear more in the local run; blue frames appear more on the perf-lab. The brightest red hotspots are kernel spin locks (`_raw_spin_unlock_irqrestore`), nftables firewall evaluation (`nft_do_chain`, `nft_meta_get_eval`), and TCP packet processing (`tcp_clean_rtx_queue`, `skb_defer_free_flush`). The blue band at the bottom is application code that gets more CPU on the perf-lab — because the kernel isn't eating it. **The local kernel is spending cycles on network packet processing and firewall rules that the perf-lab doesn't need.**
 
+The brightest red frame — `_raw_spin_unlock_irqrestore` — is worth a closer look. The stack trace shows it's triggered by Agroal (Quarkus's connection pool) returning a JDBC connection after a query: `ConnectionPool.returnConnectionHandler` → `LinkedTransferQueue.tryTransfer` → `LockSupport.unpark` → kernel `futex_wake` → `try_to_wake_up` → spin lock. With pasta adding latency, connections are held longer, more threads pile up waiting for a connection, and every return triggers a `futex_wake` to unpark a waiter. The network overhead doesn't just add direct cost — it cascades through the connection pool, amplifying the kernel time.
+
 == Isolating the network layer with pgbench
 
 To confirm the network path was the bottleneck, we ran https://www.postgresql.org/docs/current/pgbench.html[pgbench] with the same 2-query workload (50 clients, prepared statements, 30 seconds) over different network paths. We also tested with Fedora's https://wiki.nftables.org/[nftables] firewall disabled, since the flamegraph showed `nft_do_chain` in the kernel stacks:
