@@ -54,7 +54,7 @@ Red frames appear more in the local run; blue frames appear more on the perf-lab
 
 == Isolating the network layer with pgbench
 
-To confirm the network path was the bottleneck, we ran `pgbench` with the same 2-query workload (50 clients, prepared statements, 30 seconds) over different network paths. We also tested with Fedora's https://wiki.nftables.org/[nftables] firewall disabled, since the flamegraph showed `nft_do_chain` in the kernel stacks:
+To confirm the network path was the bottleneck, we ran https://www.postgresql.org/docs/current/pgbench.html[pgbench] with the same 2-query workload (50 clients, prepared statements, 30 seconds) over different network paths. We also tested with Fedora's https://wiki.nftables.org/[nftables] firewall disabled, since the flamegraph showed `nft_do_chain` in the kernel stacks:
 
 [cols="2,1,1", options="header"]
 |===
