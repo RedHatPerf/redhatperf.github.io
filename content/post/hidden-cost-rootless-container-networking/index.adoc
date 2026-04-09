@@ -130,7 +130,7 @@ With host networking, the local Fedora workstation matches the perf-lab. The rem
 
 == Takeaways
 
-* **Rootless container networking can silently dominate benchmark results.** pasta added 0.9ms per SQL statement -- invisible unless you measure the network path independently.
+* **A benchmark that doesn't stress what it claims to stress will deliver misleading results.** This is a textbook case of what Brendan Gregg calls https://www.brendangregg.com/activebenchmarking.html[active benchmarking]: "You benchmark A, but actually measure B, and conclude you've measured C." We thought we were measuring framework throughput, but we were actually measuring pasta proxy overhead. Only by observing the system _while the benchmark was running_ (mpstat, pgbench, flamegraphs) did the real bottleneck emerge. The https://quarkus.io/blog/new-benchmarks/[published benchmark] was designed to isolate framework performance from infrastructure variables -- but rootless container networking silently violated that isolation.
 
 * **The impact is asymmetric.** I/O-efficient frameworks like Quarkus are disproportionately penalized because DB latency is a larger fraction of their per-request cost. CPU-bound frameworks like Spring are barely affected, which compresses the apparent gap.
 
