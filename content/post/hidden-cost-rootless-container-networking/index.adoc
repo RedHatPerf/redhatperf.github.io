@@ -22,11 +22,11 @@ This post walks through the investigation that found the culprit.
 
 == The gap
 
-The benchmark is a REST/CRUD application backed by PostgreSQL. The app runs on the host, postgres in a rootless podman container. Each HTTP request executes 2 SQL queries (confirmed via https://www.postgresql.org/docs/current/pgstatstatements.html[pg_stat_statements]).
+The benchmark is a REST/CRUD application backed by PostgreSQL. The app runs on the host, PostgreSQL in a rootless podman container. Each HTTP request executes 2 SQL queries (confirmed via https://www.postgresql.org/docs/current/pgstatstatements.html[pg_stat_statements]).
 
 image::throughput-gap.svg[Throughput comparison: Local vs Perf-lab]
 
-Spring delivers roughly the same throughput in both environments (~12-13K TPS). Quarkus swings from 15.5K to 24.5K -- it is being held back locally. **Something between the app and postgres is penalizing Quarkus specifically.**
+Spring delivers roughly the same throughput in both environments (~12-13K TPS). Quarkus swings from 15.5K to 24.5K -- it is being held back locally. **Something between the app and PostgreSQL is penalizing Quarkus specifically.**
 
 == mpstat: where is the CPU going?
 
@@ -73,10 +73,10 @@ Rootless podman on Fedora uses https://passt.top/passt/[pasta (passt)] to forwar
 
 ----
 With pasta (default rootless):
-  App  -->  kernel  -->  pasta (userspace)  -->  kernel  -->  container netns  -->  postgres
+  App  -->  kernel  -->  pasta (userspace)  -->  kernel  -->  container netns  -->  PostgreSQL
 
 With --network=host:
-  App  -->  kernel  -->  postgres (same network namespace)
+  App  -->  kernel  -->  PostgreSQL (same network namespace)
 ----
 
 Every JDBC packet traverses two extra kernel/userspace boundary crossings plus a userspace copy in the pasta process. For a chatty protocol like JDBC with small, frequent packets, this is devastating.
@@ -104,7 +104,7 @@ In other words, **pasta was masking Quarkus's CPU efficiency advantage** -- the 
 
 == The fix
 
-Run the postgres container with `--network=host` instead of port-mapping (`-p 5432:5432`). We added `DB_HOST_NETWORK=true` to the benchmark's https://github.com/quarkusio/spring-quarkus-perf-comparison/blob/main/scripts/infra.sh[infrastructure script].
+Run the PostgreSQL container with `--network=host` instead of port-mapping (`-p 5432:5432`). We added `DB_HOST_NETWORK=true` to the benchmark's https://github.com/quarkusio/spring-quarkus-perf-comparison/blob/main/scripts/infra.sh[infrastructure script].
 
 [cols="2,1,1,1", options="header"]
 |===
@@ -140,7 +140,7 @@ image::diff-flamegraph.png[Differential flamegraph: default pasta vs host networ
 
 Red means more CPU in the default (pasta) run; blue means more CPU with host networking. The red stacks that dominated the first flamegraph — `_raw_spin_unlock_irqrestore`, `nft_do_chain`, `tcp_clean_rtx_queue` — have disappeared.
 
-**With `--network=host`, the app and postgres share the same network namespace; packets never leave the kernel.**
+**With `--network=host`, the app and PostgreSQL share the same network namespace; packets never leave the kernel.**
 
 == Takeaways
 
