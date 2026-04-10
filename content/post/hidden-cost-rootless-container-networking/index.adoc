@@ -83,11 +83,9 @@ With --network=host:
 
 Every JDBC packet traverses two extra kernel/userspace boundary crossings plus a userspace copy in the pasta process. For a chatty protocol like JDBC with small, frequent packets, this is devastating.
 
-=== Bonus: nftables firewall overhead
+== The fix
 
-Fedora's `firewalld` maintains 973 https://wiki.nftables.org/[nftables] rules that every packet traverses (`nf_hook_slow` -> `nft_do_chain`). This is independent of pasta — it affects any network traffic on the host. Disabling the firewall recovers another ~10% throughput. This matches findings from https://talawah.io/blog/extreme-http-performance-tuning-one-point-two-million/[prior work on extreme HTTP tuning] where iptables `nf_hook_slow` consumed ~18% of CPU in benchmarks.
-
-== Why Quarkus is affected but Spring is not
+Run the PostgreSQL container with `--network=host` instead of port-mapping (`-p 5432:5432`). We added `DB_HOST_NETWORK=true` to the benchmark's https://github.com/quarkusio/spring-quarkus-perf-comparison/blob/main/scripts/infra.sh[infrastructure script].
 
 [cols="2,1,1,1", options="header"]
 |===
@@ -95,44 +93,18 @@ Fedora's `firewalld` maintains 973 https://wiki.nftables.org/[nftables] rules th
 
 | Default (pasta + nftables) | 15,504 | 13,062 | 1.19x
 | `--network=host` | 24,116 | 13,368 | 1.80x
+| `--network=host` + no nftables | 26,039 | 13,214 | 1.97x
 | Perf-lab (RHEL 9.6) | 24,472 | 11,783 | 2.08x
 |===
 
-Removing pasta boosts Quarkus by 55% but Spring by only 2.3%. **The same absolute overhead hits the efficient framework harder.**
+**With host networking, Quarkus throughput improves by 55% while Spring barely moves (+2.3%).** Disabling the firewall on top recovers another 8% for Quarkus, bringing the ratio from 1.19x back to 1.97x — close to the perf-lab's 2.08x.
 
-Pasta adds ~0.073 ms of kernel CPU per request to Quarkus (the difference between 0.231 and 0.158 ms/req) — that's **46% on top of its framework cost**. Quarkus is CPU-saturated, so every freed cycle translates directly to more requests. Spring spends far more CPU in its own framework code, so saving a small fraction of cycles on networking simply cannot help.
+Fedora's `firewalld` maintains 973 https://wiki.nftables.org/[nftables] rules that every packet traverses (`nf_hook_slow` -> `nft_do_chain`). This is independent of pasta — it affects any network traffic on the host. Disabling the firewall recovers another ~10% throughput. This matches findings from https://talawah.io/blog/extreme-http-performance-tuning-one-point-two-million/[prior work on extreme HTTP tuning] where iptables `nf_hook_slow` consumed ~18% of CPU in benchmarks.
 
-**The more CPU-efficient your framework is, the more you feel the infrastructure tax.**
+== Why Quarkus is affected but Spring is not
 
-== The fix
+Pasta adds ~0.073 ms of kernel CPU per request to Quarkus — that's **46% on top of its framework cost**. Quarkus is CPU-saturated, so every freed cycle translates directly to more requests. Spring spends far more CPU in its own framework code, so saving a small fraction of cycles on networking simply cannot help. **The more CPU-efficient your framework is, the more you feel the infrastructure tax.**
 
-Run the PostgreSQL container with `--network=host` instead of port-mapping (`-p 5432:5432`). We added `DB_HOST_NETWORK=true` to the benchmark's https://github.com/quarkusio/spring-quarkus-perf-comparison/blob/main/scripts/infra.sh[infrastructure script].
-
-[cols="2,1,1,1", options="header"]
-|===
-| Configuration | Quarkus TPS | vs Perf-lab | Ratio Q/S
-
-| Default (pasta + nftables) | 15,504 | 63.4% | 1.19x
-| No nftables only | 16,105 | 65.8% | --
-| `--network=host` | 24,116 | 98.5% | 1.80x
-| `--network=host` + no nftables | 26,039 | 106.4% | --
-| Perf-lab (RHEL 9.6) | 24,472 | 100% | 2.08x
-|===
-
-**With host networking, the local Fedora workstation matches the perf-lab.** The remaining gap to the perf-lab's 2.08x ratio is accounted for by nftables (Fedora's 973 rules vs RHEL's minimal ruleset) and minor kernel differences.
-
-Per-request CPU cost confirms the picture:
-
-[cols="2,1", options="header"]
-|===
-| Configuration | CPU ms/req
-
-| Default pasta (15,504 TPS) | 0.231
-| Host networking (24,116 TPS) | 0.158
-| Perf-lab (24,472 TPS) | 0.158
-|===
-
-With host networking, per-request cost **matches the perf-lab exactly**: 0.158 ms/req.
 
 == Confirming the fix
 
