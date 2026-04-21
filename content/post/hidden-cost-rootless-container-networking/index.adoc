@@ -99,7 +99,7 @@ Run the PostgreSQL container with `--network=host` instead of port-mapping (`-p 
 | Perf-lab (RHEL 9.6, different hardware) | 24,472 | 11,783 | 2.08x
 |===
 
-**With host networking, Quarkus throughput improves by 55% while Spring moves by +2.3%. Disabling the firewall on top recovers another 8% for Quarkus, bringing the ratio from 1.19x back to 1.97x — close to the perf-lab's 2.08x.
+**With host networking, Quarkus throughput improves by 55% while Spring moves by +2.3%.** Disabling the firewall on top recovers another 8% for Quarkus, bringing the ratio from 1.19x back to 1.97x — close to the perf-lab's 2.08x.
 
 Fedora's `firewalld` loads nearly 1000 https://wiki.nftables.org/[nftables] rules that every packet traverses. This is independent of pasta — disabling the firewall adds another 13% throughput in the pgbench test (18,106 → 20,402 TPS).
 
