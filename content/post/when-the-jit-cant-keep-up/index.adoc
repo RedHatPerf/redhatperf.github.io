@@ -10,7 +10,7 @@ authors:
 
 _https://www.youtube.com/watch?v=gAjR4_CbPpQ[Daft Punk]_
 
-Our https://github.com/quarkusio/spring-quarkus-perf-comparison[Quarkus vs Spring CRUD benchmark] shows Quarkus delivering roughly 2x Spring's throughput on a REST/CRUD workload backed by PostgreSQL. The latest https://quarkus.io/benchmarks/[public results] confirm this.
+Our https://github.com/quarkusio/spring-quarkus-perf-comparison/tree/38345ca[Quarkus vs Spring CRUD benchmark] shows Quarkus delivering roughly 2x Spring's throughput on a REST/CRUD workload backed by PostgreSQL. The latest https://github.com/quarkusio/benchmarks/commit/d26d45d[public results] confirm this.
 
 But throughput is an average over a measurement window. It doesn't tell you how long the application took to get there. This post looks at the dimension averages hide: **time to peak performance**.
 
@@ -39,7 +39,7 @@ image::c2-wait-baseline.png[C2 thread CPU and wait: spring4-jvm vs quarkus3-jvm]
 The JVM runs 2 C2 compiler threads on this configuration. The chart sums both threads: 200% wait means both are fully waiting for a CPU. Green is CPU time doing actual compilation work; pink is time spent in the run queue, ready to run but waiting for a CPU.
 ====
 
-During **startup** (green region, before any request arrives), both frameworks show **C2 running freely**: green with no pink. Spring's C2 threads are at ~200% usr (both maxed out), reflecting more framework code to compile at boot. Quarkus's C2 threads peak at ~80% usr, less startup compilation work. Spring's startup also takes longer (~13 seconds vs ~8 for Quarkus; the https://quarkus.io/benchmarks/[public benchmark results] show **Quarkus starts in roughly half the time**).
+During **startup** (green region, before any request arrives), both frameworks show **C2 running freely**: green with no pink. Spring's C2 threads are at ~200% usr (both maxed out), reflecting more framework code to compile at boot. Quarkus's C2 threads peak at ~80% usr, less startup compilation work. Spring's startup also takes longer (~13 seconds vs ~8 for Quarkus; the https://github.com/quarkusio/benchmarks/commit/d26d45d[public benchmark results] show **Quarkus starts in roughly half the time**).
 
 Once the **warmup** load hits, the picture changes.
 
@@ -155,4 +155,4 @@ The JVM keeps serving requests while broken: liveness probes pass, the applicati
 * **https://github.com/sysstat/sysstat[pidstat]** (`-t -u -w`): per-thread CPU utilization including `%wait` (time in run queue waiting for CPU) and context switches (voluntary / involuntary). Part of the https://github.com/sysstat/sysstat[sysstat] package.
 * **https://github.com/Hyperfoil/Hyperfoil[Hyperfoil]**: load generator (100 concurrent connections, fixed-thread mode); per-second series data used for warmup throughput curves
 
-The benchmark, methodology, and data are public: see https://github.com/quarkusio/spring-quarkus-perf-comparison/issues/591[issue #591] and https://github.com/quarkusio/spring-quarkus-perf-comparison/issues/420[issue #420].
+The benchmark, methodology, and data are public: see https://github.com/quarkusio/spring-quarkus-perf-comparison/issues/591[issue #591] and https://github.com/quarkusio/spring-quarkus-perf-comparison/issues/420[issue #420]. The benchmark code used in this analysis is at https://github.com/quarkusio/spring-quarkus-perf-comparison/tree/38345ca[commit 38345ca].
