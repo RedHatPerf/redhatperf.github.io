@@ -114,7 +114,7 @@ spring4-leyden is the most severely affected configuration. To confirm that C2 s
 
 [NOTE]
 ====
-**Troubleshooting hints:** To diagnose C2 starvation in your own application, enable https://docs.oracle.com/en/java/javase/25/jfapi/flight-recorder-api-programmers-guide.html[JDK Flight Recorder] with `-XX:StartFlightRecording=settings=profile,dumponexit=true` and look at:
+**Troubleshooting hints:** To diagnose C2 starvation in your own application, enable https://dev.java/learn/jvm/jfr/[JDK Flight Recorder] with `-XX:StartFlightRecording=settings=profile,dumponexit=true` and look at:
 
 * `jdk.CompilerStatistics`: track `compileCount` and `nmethodCodeSize` over time. If the compiled code size is still growing during your measurement window, the compiler hasn't finished.
 * `jdk.Compilation`: individual compilations exceeding 100ms (with `settings=profile`). **Wall-clock durations of 10+ seconds indicate the compiler thread is being preempted.**
@@ -151,7 +151,7 @@ The JVM keeps serving requests while broken: liveness probes pass, the applicati
 
 == Tools used
 
-* **https://docs.oracle.com/en/java/javase/25/jfapi/flight-recorder-api-programmers-guide.html[JDK Flight Recorder]** (`-XX:StartFlightRecording=settings=profile,dumponexit=true`): `jdk.CompilerStatistics` for compiled code size over time, `jdk.Compilation` for individual compilation durations
+* **https://dev.java/learn/jvm/jfr/[JDK Flight Recorder]** (`-XX:StartFlightRecording=settings=profile,dumponexit=true`): `jdk.CompilerStatistics` for compiled code size over time, `jdk.Compilation` for individual compilation durations
 * **https://github.com/sysstat/sysstat[pidstat]** (`-t -u -w`): per-thread CPU utilization including `%wait` (time in run queue waiting for CPU) and context switches (voluntary / involuntary). Part of the https://github.com/sysstat/sysstat[sysstat] package.
 * **https://github.com/Hyperfoil/Hyperfoil[Hyperfoil]**: load generator (100 concurrent connections, fixed-thread mode); per-second series data used for warmup throughput curves
 
