@@ -97,8 +97,6 @@ image::c2-wait-leyden.png[C2 thread CPU and wait: spring4-leyden vs quarkus3-ley
 
 The STARTUP region is visibly shorter with Leyden, though the load generator adds its own startup overhead before the first request arrives. But the C2 threads are starved even more severely during warmup. **spring4-leyden shows near-200% wait through the entire warmup and into the load test.** **quarkus3-leyden recovers, but takes ~90 seconds to reach peak instead of ~60 seconds without Leyden: 50% longer.**
 
-Interestingly, JFR's `jdk.CompilerQueueUtilization` shows that Leyden actually **reduces** the total C2 work: spring4-leyden requests 2,622 C2 compilations with a queue peak of 459, while spring4-jvm requests 5,273 with a peak of 3,119. Despite less total work, Leyden performs worse. The training run for Spring uses `-Dspring.context.exit=onRefresh`, which only exercises startup and context initialization, not request handling. The AOT profiles therefore capture **startup methods**, and the C2 compilations they trigger are biased toward code that is not on the hot path during warmup. Without Leyden, live profiling drives C2 toward the methods that actually serve requests.
-
 As with the non-Leyden case, **virtual threads fix the problem for both frameworks**: spring4-virtual-leyden delivers 9,264 TPS (vs 2,921 without virtual threads) and quarkus3-virtual-leyden delivers 13,410 TPS (vs 13,060). Fewer carrier threads on CPU means the **C2 compiler gets the scheduling gaps it needs**, regardless of whether Leyden is enabled.
 
 === Confirmation experiment: -Xbatch
