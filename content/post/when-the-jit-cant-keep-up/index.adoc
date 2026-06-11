@@ -83,7 +83,7 @@ Without cached compiled code, **C2 still needs to compile hot methods at runtime
 
 image::warmup-tps-spring-leyden.png[Spring: jvm vs Leyden]
 
-**spring4-leyden drops to 2,921 TPS, less than half of spring4-jvm (7,850).** During warmup, the two curves are close for the first 30 seconds, then spring4-jvm pulls ahead while spring4-leyden stalls at ~2,500-3,000.
+**spring4-leyden measures 2,921 TPS after the 2-minute warmup, less than half of spring4-jvm (7,850).** The application has not yet reached peak performance when the load test starts. During warmup, the two curves are close for the first 30 seconds, then spring4-jvm pulls ahead while spring4-leyden stalls at ~2,500-3,000.
 
 image::warmup-tps-quarkus-leyden.png[Quarkus: jvm vs Leyden]
 
@@ -101,7 +101,7 @@ As with the non-Leyden case, **virtual threads fix the problem for both framewor
 
 === Confirmation experiment: -Xbatch
 
-spring4-leyden is the most severely affected configuration. To confirm that C2 starvation is the cause, and not something inherent to the application or Leyden, we ran it with `-Xbatch`. This JVM flag forces the thread that triggers a compilation to block until the compilation completes. It is not a production-ready fix, but it answers a specific question: what happens if the compiler gets CPU time?
+spring4-leyden is the most severely affected configuration. The pidstat data shows C2 threads spending most of their time waiting for CPU. To confirm that this CPU starvation is the bottleneck, we ran it with `-Xbatch`. This JVM flag forces application threads to block when they trigger a compilation, effectively backpressuring them and freeing CPU for the compiler. It is not a production-ready fix, but it answers a specific question: if the compiler gets enough CPU time, does the throughput recover?
 
 [cols="2,1,1", options="header"]
 |===
