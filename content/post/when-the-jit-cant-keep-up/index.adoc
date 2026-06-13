@@ -89,9 +89,9 @@ image::warmup-tps-spring-leyden.png[Spring: jvm vs Leyden]
 
 image::warmup-tps-quarkus-leyden.png[Quarkus: jvm vs Leyden]
 
-**quarkus3-leyden takes ~90 seconds to reach peak, vs ~60 seconds without Leyden.** The final throughput is also lower (13,060 vs 14,710).
+**quarkus3-leyden takes ~90 seconds to reach peak, vs ~60 seconds without Leyden.** The final throughput is also lower (13,060 vs 14,710). Quarkus's Leyden integration uses https://quarkus.io/blog/leyden-2/[`@QuarkusIntegrationTest`] for training, which exercises actual HTTP endpoints, providing more representative profiling data than a startup-only training run. Yet even with this richer training data, the warmup is slower with Leyden. The AOT method profiling in JDK 25 captures what to compile, but the compiled code still needs to be produced at runtime by C2.
 
-Adding virtual threads recovers the lost throughput: spring4-virtual-leyden delivers 9,264 TPS, comparable to spring4-virtual (9,924).
+Adding virtual threads recovers the lost throughput for both frameworks: spring4-virtual-leyden delivers 9,264 TPS (comparable to spring4-virtual's 9,924) and quarkus3-virtual-leyden delivers 13,410 TPS (comparable to quarkus3-virtual's 15,190).
 
 The C2 compiler thread chart for the Leyden variants shows why:
 
