@@ -77,9 +77,11 @@ Virtual threads reduce the on-CPU thread count from 114 to 18 for Spring, and fr
 
 == What about Leyden?
 
-https://openjdk.org/projects/leyden/[Project Leyden] in JDK 25 caches class loading, linking, and method profiling data in an AOT cache (https://openjdk.org/jeps/483[JEP 483], https://openjdk.org/jeps/514[JEP 514], https://openjdk.org/jeps/515[JEP 515]). However, **AOT Code Compilation** (caching the actual C2-compiled native code) is https://openjdk.org/jeps/8335368[not yet in JDK 25].
+https://openjdk.org/projects/leyden/[Project Leyden] in JDK 25 caches class loading, linking, and method profiling data in an AOT cache (https://openjdk.org/jeps/483[JEP 483], https://openjdk.org/jeps/514[JEP 514], https://openjdk.org/jeps/515[JEP 515]). **AOT Code Compilation** (caching the actual C2-compiled native code) is https://openjdk.org/jeps/8335368[not yet in JDK 25] and is available on the Leyden premain branch for future releases.
 
-Without cached compiled code, **C2 still needs to compile hot methods at runtime**. In JDK 25, C2 compilations from the AOT cache's method profiles start concurrently with the application threads at startup.
+To be clear: **Leyden is not at fault here.** The AOT cache in JDK 25 is designed to accelerate startup, and it does: Spring starts in 6.4s with Leyden vs 9.3s without. The warmup behavior we observe is a consequence of how the training run is performed, not a limitation of Leyden itself.
+
+Our benchmark follows the https://docs.spring.io/spring-boot/reference/packaging/aot-cache.html[official Spring Boot AOT cache documentation], which recommends `-Dspring.context.exit=onRefresh` for the training run. This exercises class loading and context initialization, but **does not send any HTTP traffic**. The AOT cache therefore contains profiling data for startup methods, not for the request-handling hot path. Without cached compiled code, **C2 still needs to compile hot methods at runtime**, and the profiling data from a startup-only training run does not help with that.
 
 image::warmup-tps-spring-leyden.png[Spring: jvm vs Leyden]
 
