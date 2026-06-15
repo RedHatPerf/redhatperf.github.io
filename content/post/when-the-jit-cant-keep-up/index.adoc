@@ -123,7 +123,7 @@ spring4-leyden is the most severely affected configuration. The pidstat data sho
 Combine with `pidstat -t -u -w 1` to see C2 thread `%wait` and worker thread involuntary context switches.
 ====
 
-== The scheduler matters
+== The OS scheduler matters
 
 On a preliminary test with **RHEL 10** (kernel 6.12, EEVDF scheduler), spring4-leyden delivers 4,411 TPS, a **36% improvement** over the 3,231 TPS on RHEL 9.6 (kernel 5.14, CFS), same hardware and topology. **The newer scheduler gives C2 threads more CPU time under contention.** It does not eliminate the problem, but it reduces the severity.
 
@@ -145,7 +145,7 @@ The JVM keeps serving requests while broken: liveness probes pass, the applicati
 
 * **Leaner request processing helps.** Quarkus worker threads yield the CPU voluntarily 4x more often than Spring's, with 20x fewer involuntary preemptions. The compiler gets scheduling gaps to work in.
 
-* **Leyden does not yet cache compiled code.** Until AOT Code Compilation (https://openjdk.org/jeps/8335368[JEP draft 8335368]) ships, Leyden can make the warmup problem worse. Virtual threads can recover the lost throughput.
+* **Leyden does not yet cache compiled code.** Until AOT Code Compilation (https://openjdk.org/jeps/8335368[JEP draft 8335368]) ships, Leyden can make the warmup problem worse, if C2 is starved. Virtual threads can recover the lost throughput.
 
 * **The OS scheduler matters.** RHEL 10's EEVDF scheduler shows a 36% throughput improvement for the worst case. The scheduling algorithm determines how background compiler threads fare under contention.
 
