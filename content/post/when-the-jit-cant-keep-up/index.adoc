@@ -121,7 +121,13 @@ All the results above are from our RHEL 9.6 performance lab (kernel 5.14, CFS sc
 
 image::warmup-tps-local-eevdf.png[Warmup curve on Fedora 43 (EEVDF): spring4-jvm vs quarkus3-jvm]
 
-The peak throughput is different because, although clocked at the same speed, this is a different CPU architecture than the lab. The important comparison is the **shape of the curve**: spring4-jvm now reaches peak **during warmup** (~110 seconds), while on CFS it was still at ~3,300 req/s after the full 2-minute warmup. Quarkus peaks at ~35 seconds instead of ~60. **The EEVDF scheduler gives C2 threads more CPU time under contention.** It does not eliminate the problem, but it reduces the severity.
+The peak throughput is different because, although clocked at the same speed, this is a different CPU architecture than the lab. The important comparison is the **shape of the curve**: spring4-jvm now reaches peak **during warmup** (~110 seconds), while on CFS it was still at ~3,300 req/s after the full 2-minute warmup. Quarkus peaks at ~35 seconds instead of ~60.
+
+The C2 compiler thread chart confirms why:
+
+image::c2-wait-local-eevdf.png[C2 thread CPU and wait on Fedora 43 (EEVDF): spring4-jvm vs quarkus3-jvm]
+
+Compare this to the CFS charts above: C2 threads now get significantly more CPU time (green) during warmup. **The EEVDF scheduler gives C2 threads more CPU time under contention.** It does not eliminate the problem, but it reduces the severity.
 
 == Does this happen in production?
 
