@@ -112,12 +112,6 @@ While investigating these results, we shared our findings with the OpenJDK commu
 
 [NOTE]
 ====
-If you enable JDK Flight Recorder (`-XX:StartFlightRecording`) on a Leyden-enabled application, the `jdk.jfr` module added at runtime can invalidate the AOT cache if it was not present during training (https://bugs.openjdk.org/browse/JDK-8386853[JDK-8386853]). For Quarkus, this also affects the two-step AOT cache creation process (https://github.com/quarkusio/quarkus/issues/54876[quarkus#54876]).
-====
-
-
-[NOTE]
-====
 **Troubleshooting hints:** To diagnose C2 starvation in your own application, enable https://dev.java/learn/jvm/jfr/[JDK Flight Recorder] with `-XX:StartFlightRecording=settings=profile,dumponexit=true` and look at:
 
 * `jdk.CompilerStatistics`: track `compileCount` and `nmethodCodeSize` over time. If the compiled code size is still growing during your measurement window, the compiler hasn't finished.
@@ -125,6 +119,8 @@ If you enable JDK Flight Recorder (`-XX:StartFlightRecording`) on a Leyden-enabl
 * `jdk.CompilerQueueUtilization`: if the C2 `queueSize` is non-zero during your measurement window, methods are waiting to be compiled.
 
 Combine with `pidstat -t -u -w 1` to see C2 thread `%wait` and worker thread involuntary context switches.
+
+**Leyden caveat:** enabling JDK Flight Recorder (`-XX:StartFlightRecording`) on a Leyden-enabled application can invalidate the AOT cache, because the `jdk.jfr` module added at runtime was not present during training (https://bugs.openjdk.org/browse/JDK-8386853[JDK-8386853]). For Quarkus, this also affects the two-step AOT cache creation process (https://github.com/quarkusio/quarkus/issues/54876[quarkus#54876]).
 ====
 
 == The OS scheduler matters
