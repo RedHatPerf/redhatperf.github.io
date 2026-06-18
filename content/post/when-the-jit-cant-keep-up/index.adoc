@@ -18,7 +18,7 @@ The benchmark runs on our RHEL 9.6 performance lab with JDK 25, 4 pinned cores p
 
 == The warmup curve
 
-Hyperfoil records per-second throughput during each phase. Here is the warmup curve for the two baseline configurations, Quarkus and Spring, both with platform threads:
+https://github.com/Hyperfoil/Hyperfoil[Hyperfoil] records per-second throughput during each phase. Here is the warmup curve for the two baseline configurations, Quarkus and Spring, both with platform threads:
 
 image::warmup-tps-baseline.png[Warmup curve: quarkus3-jvm vs spring4-jvm]
 
