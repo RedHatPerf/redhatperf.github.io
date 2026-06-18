@@ -144,7 +144,7 @@ Java microservices on containerized platforms commonly run with 4-8 CPU cores an
 
 The JVM keeps serving requests while broken: liveness probes pass, the application just runs slow code. Without https://www.brendangregg.com/activebenchmarking.html[active benchmarking], C2 starvation is invisible.
 
-Leyden's upcoming AOT Code Compilation (https://openjdk.org/jeps/8335368[JEP draft 8335368]) should help immensely: by caching C2-compiled native code from a training run, the need for runtime C2 activity is heavily reduced. With proper training data that exercises the hot paths, applications could start with optimized code already available, sidestepping the starvation problem entirely.
+Leyden's upcoming AOT Code Compilation (https://openjdk.org/jeps/8335368[JEP draft 8335368]) should help immensely: by caching C2-compiled native code from a training run, the need for runtime C2 activity is heavily reduced. **With proper training data that exercises the hot paths**, applications could start with optimized code already available, **sidestepping the starvation problem entirely**.
 
 == Takeaways
 
