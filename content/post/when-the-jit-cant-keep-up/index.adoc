@@ -30,6 +30,8 @@ The shape matters. Quarkus's curve has a steep initial ramp and plateaus early. 
 
 The HotSpot JVM uses https://developers.redhat.com/articles/2021/06/23/how-jit-compiler-boosts-java-performance-openjdk[tiered compilation]: code starts in the interpreter, gets compiled by C1, and eventually by C2 which produces the fastest native code. C2 runs on dedicated background threads. If those threads can't get CPU time, the application stays on slower code longer.
 
+The key is that this workload is **CPU-bound**: mpstat shows all 4 application cores at **95-97% usr with 0% idle** during warmup. The application threads are actively consuming all available CPU. It is not the mere presence of many threads that starves C2, it is that those threads are doing CPU-intensive work with no idle gaps for the compiler to run in.
+
 https://man7.org/linux/man-pages/man1/pidstat.1.html[pidstat] with per-thread reporting (`-t`) shows `%wait`: the percentage of time a thread spends in the run queue, ready to execute but waiting for a CPU. This is collected as part of our https://github.com/quarkusio/spring-quarkus-perf-comparison/issues/62[active benchmarking practice].
 
 image::c2-wait-baseline.png[C2 thread CPU and wait: spring4-jvm vs quarkus3-jvm]
