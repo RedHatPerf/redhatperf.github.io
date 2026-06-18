@@ -56,7 +56,7 @@ Both are starved during warmup. The difference is recovery, and it has two dimen
 
 The impact of this mechanism is visible in JFR execution samples. Each sample's leaf frame is tagged as interpreted, JIT compiled (C1), or inlined (typically C2). For spring4-jvm during warmup, C1-compiled code dominates at **55-65%** of leaf frames, while C2-inlined code stays at just **30-40%**. JFR's `jdk.CompilerQueueUtilization` shows the C2 queue peaking at **3,119 pending methods** and staying above 3,000 for over 60 seconds: the backpressure is fully engaged, and methods are stuck at C1 tiers. After the 30-second cooldown gives C2 the CPU it needs, the picture flips: C2-inlined code jumps to **70-84%** and C1 drops to ~20%. **The throughput jump after cooldown is the C2-compiled code finally running.**
 
-Spring Boot's Tomcat creates a platform thread per HTTP connection. With 100 connections, pidstat shows **~130 threads with %CPU > 0** during warmup. Quarkus shows **~47**. Averaged per worker thread across the warmup:
+Spring Boot's Tomcat creates a platform thread per HTTP connection. With 100 connections, pidstat shows **~130 threads with %CPU > 0** during warmup. Quarkus shows **~47**. pidstat also reports two types of context switches: **voluntary** (the thread yields the CPU on its own, typically because it starts waiting for I/O) and **involuntary** (the scheduler forcibly preempts the thread because its time slice expired). Averaged per worker thread across the warmup:
 
 [cols="2,1,1,1", options="header"]
 |===
