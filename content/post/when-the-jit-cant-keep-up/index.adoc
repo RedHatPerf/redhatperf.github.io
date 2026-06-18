@@ -54,7 +54,7 @@ Both are starved during warmup. The difference is recovery, and it has two dimen
 **When the JIT can't keep up.** HotSpot's compilation policy has a backpressure mechanism: when the C2 queue grows too large, the compiler skips tier 3 (C1 with full profiling) and compiles methods at tier 2 (C1 without full profiling) instead. This reduces the load on C2, because tier 2 methods generate less profiling data to process later. When the queue pressure drops, methods get promoted from tier 2 to tier 3 and eventually to tier 4 (C2). There is also an "old method" safety net: methods that have been around long enough get promoted regardless of queue size.
 ====
 
-The impact of this mechanism is visible in JFR execution samples. Each sample's leaf frame is tagged as interpreted, JIT compiled (C1), or inlined (typically C2). For spring4-jvm during warmup, C1-compiled code dominates at **55-65%** of leaf frames, while C2-inlined code stays at just **30-40%**. JFR's `jdk.CompilerQueueUtilization` shows the C2 queue peaking at **3,119 pending methods** and staying above 3,000 for over 60 seconds: the backpressure is fully engaged, and methods are stuck at C1 tiers. After the 30-second cooldown gives C2 the CPU it needs, the picture flips: C2-inlined code jumps to **70-84%** and C1 drops to ~20%. **The throughput jump after cooldown is the C2-compiled code finally running.**
+The impact of this mechanism is visible in JFR execution samples. Each sample's leaf frame is tagged as interpreted, JIT compiled (C1), or inlined (typically C2). For spring4-jvm during warmup, **C1-compiled code dominates at ~60% of leaf frames while C2-inlined code stays at ~30%**. JFR's `jdk.CompilerQueueUtilization` shows the C2 queue peaking at over **3,000 pending methods** and staying there for the entire warmup: the backpressure is fully engaged, and methods are stuck at C1 tiers. After the 30-second cooldown gives C2 the CPU it needs, the picture flips: **C2-inlined code jumps to ~80% and C1 drops to ~20%**. The throughput jump after cooldown is the C2-compiled code finally running.
 
 Spring Boot's Tomcat creates a platform thread per HTTP connection. With 100 connections, pidstat shows **~130 threads with %CPU > 0** during warmup. Quarkus shows **~47**. pidstat also reports two types of context switches: **voluntary** (the thread yields the CPU on its own, typically because it starts waiting for I/O) and **involuntary** (the scheduler forcibly preempts the thread because its time slice expired). Averaged per worker thread across the warmup:
 
@@ -80,7 +80,7 @@ image::warmup-tps-quarkus-vt.png[Quarkus: platform threads vs virtual threads]
 
 **Quarkus with virtual threads reaches peak in ~15 seconds instead of ~60 seconds**, but both converge to ~15,000 req/s. The benefit is warmup speed, not peak throughput.
 
-Virtual threads reduce the on-CPU thread count from 114 to 18 for Spring, and from 39 to 15 for Quarkus. Fewer threads competing for 4 cores means the C2 compiler threads get more CPU time during warmup.
+Fewer threads competing for 4 cores means the C2 compiler threads get more CPU time during warmup.
 
 == What about Leyden?
 
@@ -98,13 +98,13 @@ image::warmup-tps-quarkus-leyden.png[Quarkus: jvm vs Leyden]
 
 **quarkus3-leyden takes ~90 seconds to reach peak, vs ~60 seconds without Leyden.** The final throughput is also lower (13,060 vs 14,710). Quarkus's Leyden integration uses https://quarkus.io/blog/leyden-2/[`@QuarkusIntegrationTest`] for training, which exercises actual HTTP endpoints, providing richer profiling data than a startup-only training run. Yet the warmup is still slower.
 
-C2 starvation is still present with Leyden:
+The C2 compiler thread chart shows the starvation is even worse with Leyden:
 
 image::c2-wait-leyden.png[C2 thread CPU and wait: spring4-leyden vs quarkus3-leyden]
 
-The STARTUP region is visibly shorter with Leyden. Compared to the non-Leyden charts above, the C2 starvation is worse: **spring4-leyden shows near-200% wait through the entire warmup and into the load test** (vs 150-175% for spring4-jvm). **quarkus3-leyden recovers at ~90 seconds instead of ~60 seconds without Leyden.**
+**spring4-leyden shows near-200% wait through the entire warmup and into the load test.** quarkus3-leyden recovers, but takes ~90 seconds instead of ~60.
 
-As with the non-Leyden case, **virtual threads fix the starvation for both frameworks**: spring4-virtual-leyden delivers 9,264 TPS (vs 2,921 without virtual threads) and quarkus3-virtual-leyden delivers 13,410 TPS (vs 13,060).
+As with the non-Leyden case, **virtual threads fix the starvation for both frameworks**: spring4-virtual-leyden delivers 9,264 TPS (vs 2,921 without virtual threads), a 3x improvement.
 
 === Plot twist
 
@@ -139,10 +139,7 @@ Compare this to the CFS charts above: C2 threads now get significantly more CPU 
 
 == Does this happen in production?
 
-Java microservices on containerized platforms commonly run with 4-8 CPU cores and thread pools of 200+. The same dynamic applies: **C2 threads are starved, compilations take seconds instead of milliseconds, and response times may never stabilize.** Pods get killed and restarted before the compiler finishes, a cycle that repeats indefinitely.
-
-
-The JVM keeps serving requests while broken: liveness probes pass, the application just runs slow code. Without https://www.brendangregg.com/activebenchmarking.html[active benchmarking], C2 starvation is invisible.
+Our benchmark uses 4 cores and 100 connections, but production is no different: containerized microservices commonly run with similar CPU budgets and large thread pools. **C2 threads get starved, compilations take seconds instead of milliseconds, and pods get killed and restarted before the compiler finishes.** The JVM keeps serving requests while broken: liveness probes pass, the application just runs slow code. Without https://www.brendangregg.com/activebenchmarking.html[active benchmarking], C2 starvation is invisible.
 
 Leyden's upcoming AOT Code Compilation (https://openjdk.org/jeps/8335368[JEP draft 8335368]) should help immensely: by caching C2-compiled native code from a training run, the need for runtime C2 activity is heavily reduced. **With proper training data that exercises the hot paths**, applications could start with optimized code already available, **sidestepping the starvation problem entirely**.
 
@@ -158,12 +155,8 @@ Leyden's upcoming AOT Code Compilation (https://openjdk.org/jeps/8335368[JEP dra
 
 * **Leyden warmup in JDK 25 is affected by a https://bugs.openjdk.org/browse/JDK-8386852[compilation policy bug].** Until this is fixed, and until AOT Code Compilation (https://openjdk.org/jeps/8335368[JEP draft 8335368]) ships, Leyden warmup numbers should not be taken as representative. Virtual threads can recover the lost throughput.
 
-* **The OS scheduler matters.** RHEL 10's EEVDF scheduler shows a 36% throughput improvement for the worst case. The scheduling algorithm determines how background compiler threads fare under contention.
+* **The OS scheduler matters.** The EEVDF scheduler gives C2 threads more CPU time under contention, reducing the warmup gap. The scheduling algorithm determines how background compiler threads fare.
 
-== Tools used
+== Tools and data
 
-* **https://dev.java/learn/jvm/jfr/[JDK Flight Recorder]** (`-XX:StartFlightRecording=settings=profile,dumponexit=true`): `jdk.CompilerStatistics` for compiled code size over time, `jdk.Compilation` for individual compilation durations
-* **https://github.com/sysstat/sysstat[pidstat]** (`-t -u -w`): per-thread CPU utilization including `%wait` (time in run queue waiting for CPU) and context switches (voluntary / involuntary). Part of the https://github.com/sysstat/sysstat[sysstat] package.
-* **https://github.com/Hyperfoil/Hyperfoil[Hyperfoil]**: load generator (100 concurrent connections, fixed-thread mode); per-second series data used for warmup throughput curves
-
-The benchmark, methodology, and data are public: see https://github.com/quarkusio/spring-quarkus-perf-comparison/issues/591[issue #591] and https://github.com/quarkusio/spring-quarkus-perf-comparison/issues/420[issue #420]. The benchmark code used in this analysis is at https://github.com/quarkusio/spring-quarkus-perf-comparison/tree/38345ca[commit 38345ca].
+All data was collected with https://dev.java/learn/jvm/jfr/[JDK Flight Recorder], https://github.com/sysstat/sysstat[pidstat] (`-t -u -w`), and https://github.com/Hyperfoil/Hyperfoil[Hyperfoil]. The benchmark, methodology, and data are public: see https://github.com/quarkusio/spring-quarkus-perf-comparison/issues/591[issue #591] and https://github.com/quarkusio/spring-quarkus-perf-comparison/issues/420[issue #420]. The benchmark code is at https://github.com/quarkusio/spring-quarkus-perf-comparison/tree/38345ca[commit 38345ca].
