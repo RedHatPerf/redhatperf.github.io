@@ -120,7 +120,7 @@ While investigating these results, we shared our findings with the OpenJDK commu
 
 Combine with `pidstat -t -u -w 1` to see C2 thread `%wait` and worker thread involuntary context switches.
 
-**Leyden caveat:** enabling JDK Flight Recorder (`-XX:StartFlightRecording`) on a Leyden-enabled application can invalidate the AOT cache, because the `jdk.jfr` module added at runtime was not present during training (https://bugs.openjdk.org/browse/JDK-8386853[JDK-8386853]). For Quarkus, this also affects the two-step AOT cache creation process (https://github.com/quarkusio/quarkus/issues/54876[quarkus#54876]).
+**Leyden caveat:** enabling JDK Flight Recorder (`-XX:StartFlightRecording`) on a Leyden-enabled application can invalidate the AOT cache, because the `jdk.jfr` module added at runtime was not present during training (this affects JDK 25, 26, and 27 EA). A separate issue (https://bugs.openjdk.org/browse/JDK-8386853[JDK-8386853]) means the JVM does not properly clean up AOT-related flags after cache rejection. For Quarkus, the two-step AOT cache creation process makes this harder to work around (https://github.com/quarkusio/quarkus/issues/54876[quarkus#54876]).
 ====
 
 == The OS scheduler matters
