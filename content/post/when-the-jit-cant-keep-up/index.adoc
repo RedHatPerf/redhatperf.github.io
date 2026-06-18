@@ -141,7 +141,6 @@ Compare this to the CFS charts above: C2 threads now get significantly more CPU 
 
 Java microservices on containerized platforms commonly run with 4-8 CPU cores and thread pools of 200+. The same dynamic applies: **C2 threads are starved, compilations take seconds instead of milliseconds, and response times may never stabilize.** Pods get killed and restarted before the compiler finishes, a cycle that repeats indefinitely.
 
-C2 starvation has a second effect: while methods are stuck at tier 3 (C1 with profiling), every thread updates shared https://wiki.openjdk.org/spaces/HotSpot/pages/13729947/MethodData[MethodData] counters concurrently, causing cache coherency overhead that actively degrades scalability with more threads (https://bugs.openjdk.org/browse/JDK-8134940[JDK-8134940], https://bugs.openjdk.org/browse/JDK-8348027[JDK-8348027]). For a deeper analysis, see https://redhatperf.github.io/post/method-data-scalability/[Sharing is (S)Caring: How Tiered Compilation Affects Java Application Scalability].
 
 The JVM keeps serving requests while broken: liveness probes pass, the application just runs slow code. Without https://www.brendangregg.com/activebenchmarking.html[active benchmarking], C2 starvation is invisible.
 
@@ -149,7 +148,7 @@ The JVM keeps serving requests while broken: liveness probes pass, the applicati
 
 * **Throughput averages hide warmup problems.** Time to peak performance is a separate dimension. An application that delivers good steady-state throughput may take minutes to get there, or never reach it.
 
-* **The C2 compiler needs CPU time.** When too many threads compete for the same cores, the C2 threads get preempted. The application runs slower code for longer, and the problem compounds through https://bugs.openjdk.org/browse/JDK-8134940[MethodData contention].
+* **The C2 compiler needs CPU time.** When too many threads compete for the same cores, the C2 threads get preempted. The application runs slower code for longer.
 
 * **Virtual threads help** by reducing the number of on-CPU threads, leaving more scheduling time for the compiler. Both frameworks warm up faster with virtual threads.
 
