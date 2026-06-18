@@ -49,6 +49,8 @@ Once the **warmup** load hits, the picture changes.
 
 Both are starved during warmup. The difference is recovery, and it has two dimensions. First, JDK Flight Recorder's `jdk.CompilerStatistics` event (which reports the cumulative total of all compilations every second) shows that **spring4-jvm needs ~17,600 total compilations to reach peak, while quarkus3-jvm needs ~12,500: 41% fewer.** A leaner framework means less work for the compiler. Second, Spring's threads yield CPU less often, so the compiler gets fewer scheduling gaps to do that larger amount of work.
 
+The impact on code quality is visible in JFR execution samples. Each sample's leaf frame is tagged as interpreted, JIT compiled (C1), or inlined (typically C2). For spring4-jvm during warmup, C1-compiled code dominates at **55-65%** of leaf frames, while C2-inlined code stays at just **30-40%**. The C2 queue (from `jdk.CompilerQueueUtilization`) peaks at **3,119 pending methods** and barely drains during warmup: `removedRate` drops to **zero** for 60+ seconds while the queue stays above 3,000. After the 30-second cooldown gives C2 the CPU it needs, the picture flips: C2-inlined code jumps to **70-84%** and C1 drops to ~20%. **The throughput jump after cooldown is the C2-compiled code finally running.**
+
 Spring Boot's Tomcat creates a platform thread per HTTP connection. With 100 connections, pidstat shows **~130 threads with %CPU > 0** during warmup. Quarkus shows **~47**. Averaged per worker thread across the warmup:
 
 [cols="2,1,1,1", options="header"]
