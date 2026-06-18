@@ -43,7 +43,7 @@ During **startup** (green region, before any request arrives), both frameworks s
 
 Once the **warmup** load hits, the picture changes.
 
-**spring4-jvm** (top panel): the C2 threads are immediately overwhelmed. The pink band fills the warmup phase, with the two threads collectively spending 140-180% of their time waiting. The compiler can barely run for the whole duration of the warmup.
+**spring4-jvm** (top panel): the C2 threads are immediately overwhelmed. The pink band fills the warmup phase, with the two threads collectively spending 140-180% of their time waiting. **The compiler can barely run for the whole duration of the warmup.**
 
 **quarkus3-jvm** (bottom panel): C2 threads are also contended during the first half of warmup (100-150% summed wait). But C2 activity drops to near zero by the second half. The compiler finishes its work within the first ~60 seconds.
 
