@@ -49,7 +49,7 @@ Once the **warmup** load hits, the picture changes.
 
 **Both are starved during warmup.** The difference is recovery. Quarkus needs **41% fewer total compilations** to reach peak (~12,500 vs ~17,600 for Spring, from JFR's `jdk.CompilerStatistics`): a leaner framework means less work for the compiler.
 
-Quarkus is also leaner at runtime. Spring Boot's Tomcat creates a platform thread per HTTP connection. With 100 connections, pidstat shows **~130 threads with %CPU > 0** during warmup. Quarkus shows **~47**. pidstat also reports two types of context switches: **voluntary** (the thread yields the CPU on its own, typically because it starts waiting for I/O) and **involuntary** (the scheduler forcibly preempts the thread because its time slice expired). Averaged per worker thread across the warmup:
+**Quarkus is also leaner at runtime.** Spring Boot's Tomcat creates a platform thread per HTTP connection. With 100 connections, pidstat shows **~130 threads with %CPU > 0** during warmup. Quarkus shows **~47**. pidstat also reports two types of context switches: **voluntary** (the thread yields the CPU on its own, typically because it starts waiting for I/O) and **involuntary** (the scheduler forcibly preempts the thread because its time slice expired). Averaged per worker thread across the warmup:
 
 [cols="2,1,1,1", options="header"]
 |===
