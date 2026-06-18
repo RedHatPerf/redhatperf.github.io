@@ -24,7 +24,7 @@ image::warmup-tps-baseline.png[Warmup curve: quarkus3-jvm vs spring4-jvm]
 
 Quarkus reaches ~14,700 req/s within 60 seconds. Spring plateaus at ~3,300 req/s during warmup, then jumps to ~7,800 during the load test after the 30-second cooldown gives the compiler time to catch up.
 
-The shape matters. Quarkus's curve has a steep initial ramp and plateaus early. Spring plateaus at less than a quarter of Quarkus's throughput during warmup, and only recovers after the cooldown period.
+**The shape matters.** Quarkus's curve has a steep initial ramp and plateaus early. Spring plateaus at less than a quarter of Quarkus's throughput during warmup, and only recovers after the cooldown period.
 
 == Why is Spring slower to warm up?
 
