@@ -14,7 +14,7 @@ Our https://github.com/quarkusio/spring-quarkus-perf-comparison/tree/38345ca[Qua
 
 But throughput is an average over a measurement window. It doesn't tell you how long the application took to get there. This post looks at the dimension averages hide: **time to peak performance**.
 
-The benchmark runs on our RHEL 9.6 performance lab with JDK 25, 4 pinned cores per application, and 100 concurrent HTTP connections. The workload is **CPU-bound by design**: https://man7.org/linux/man-pages/man1/mpstat.1.html[mpstat] shows all 4 application cores at **95-97% usr with 0% idle** during load. Each run consists of a **2-minute warmup** at full load, a **30-second cooldown**, and a **30-second load test** where throughput is measured.
+The benchmark runs on our RHEL 9.6 performance lab with JDK 25, 4 pinned cores per application, and 100 concurrent HTTP connections. The workload is **CPU-bound by design**, fully utilizing the 4 cores during load. Each run consists of a **2-minute warmup** at full load, a **30-second cooldown**, and a **30-second load test** where throughput is measured.
 
 == The warmup curve
 
