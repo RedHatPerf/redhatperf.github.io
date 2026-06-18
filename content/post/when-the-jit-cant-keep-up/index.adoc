@@ -45,7 +45,7 @@ Once the **warmup** load hits, the picture changes.
 
 **spring4-jvm** (top panel): the C2 threads are immediately overwhelmed. The pink band fills the warmup phase, with the two threads collectively spending 140-180% of their time waiting. **The compiler can barely run for the whole duration of the warmup.**
 
-**quarkus3-jvm** (bottom panel): C2 threads are also contended during the first half of warmup (100-150% summed wait). But C2 activity drops to near zero by the second half. The compiler finishes its work within the first ~60 seconds.
+**quarkus3-jvm** (bottom panel): C2 threads are also contended during the first half of warmup (100-150% summed wait). But C2 activity drops to near zero by the second half. **The compiler finishes its work** within the first ~60 seconds.
 
 Both are starved during warmup. The difference is recovery, and it has two dimensions. First, JDK Flight Recorder's `jdk.CompilerStatistics` event (which reports the cumulative total of all compilations every second) shows that **spring4-jvm needs ~17,600 total compilations to reach peak, while quarkus3-jvm needs ~12,500: 41% fewer.** A leaner framework means less work for the compiler. Second, Spring's threads yield CPU less often, so the compiler gets fewer scheduling gaps to do that larger amount of work.
 
