@@ -101,7 +101,12 @@ As with the non-Leyden case, **virtual threads fix the starvation for both frame
 
 === Plot twist
 
-While investigating these results, we shared our findings with the OpenJDK community. https://github.com/ashu-mehra[Ashutosh Mehra] from the IBM OpenJDK team looked into the compilation policy and identified a https://github.com/openjdk/jdk25u/blob/master/src/hotspot/share/compiler/compilationPolicy.cpp#L1433[bug]: when training data is present, C2 is less aggressive about promoting hot methods to full optimization. Removing this guard in a patched build enables more C2 compilations, improves peak performance, and reduces time to peak for both frameworks. **The bug has not yet been officially filed; Leyden warmup numbers in JDK 25 should not be taken as representative.**
+While investigating these results, we shared our findings with the OpenJDK community. https://github.com/ashu-mehra[Ashutosh Mehra] from the IBM OpenJDK team looked into the compilation policy and identified https://bugs.openjdk.org/browse/JDK-8386852[JDK-8386852]: when training data is present, the C2 queue size feedback mechanism that promotes "old" methods out of tier 2 is https://github.com/openjdk/jdk25u/blob/master/src/hotspot/share/compiler/compilationPolicy.cpp#L1433[disabled]. Methods compiled at tier 2 get stuck there instead of being promoted to tier 3 and tier 4, resulting in fewer C2 compilations and lower peak throughput. Removing this guard in a patched build enables more C2 compilations, improves peak performance, and reduces time to peak for both frameworks. **Until this is fixed, Leyden warmup numbers in JDK 25 should not be taken as representative.**
+
+[NOTE]
+====
+If you enable JDK Flight Recorder (`-XX:StartFlightRecording`) on a Leyden-enabled application, the `jdk.jfr` module added at runtime can invalidate the AOT cache if it was not present during training (https://bugs.openjdk.org/browse/JDK-8386853[JDK-8386853]). For Quarkus, this also affects the two-step AOT cache creation process (https://github.com/quarkusio/quarkus/issues/54876[quarkus#54876]).
+====
 
 
 [NOTE]
@@ -147,7 +152,7 @@ The JVM keeps serving requests while broken: liveness probes pass, the applicati
 
 * **Leaner request processing helps.** Quarkus worker threads yield the CPU voluntarily 4x more often than Spring's, with 20x fewer involuntary preemptions. The compiler gets scheduling gaps to work in.
 
-* **Leyden warmup in JDK 25 is affected by a https://github.com/openjdk/jdk25u/blob/master/src/hotspot/share/compiler/compilationPolicy.cpp#L1433[compilation policy bug].** Until this is fixed, and until AOT Code Compilation (https://openjdk.org/jeps/8335368[JEP draft 8335368]) ships, Leyden warmup numbers should not be taken as representative. Virtual threads can recover the lost throughput.
+* **Leyden warmup in JDK 25 is affected by a https://bugs.openjdk.org/browse/JDK-8386852[compilation policy bug].** Until this is fixed, and until AOT Code Compilation (https://openjdk.org/jeps/8335368[JEP draft 8335368]) ships, Leyden warmup numbers should not be taken as representative. Virtual threads can recover the lost throughput.
 
 * **The OS scheduler matters.** RHEL 10's EEVDF scheduler shows a 36% throughput improvement for the worst case. The scheduling algorithm determines how background compiler threads fare under contention.
 
