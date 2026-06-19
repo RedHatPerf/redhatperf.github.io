@@ -1,0 +1,94 @@
+---
+title: "LLM-Guided JVM Autotuning"
+date: 2026-06-15T00:00:00Z
+categories: ['performance', 'methodology', 'llm']
+summary: 'Revolutionizing Java Performance: How AI-Powered JVM Autotuning Simplifies Optimization'
+image: 'logo.png'
+related: ['']
+authors:
+ - Diego Lovison
+---
+
+= LLM-Guided JVM Autotuning
+
+For any software engineer working with Java, the Java Virtual Machine (JVM) has hundreds of startup flags, different Garbage Collection (GC) algorithms, and complex thresholds. Extracting peak performance from a production application has always been a highly complex art.
+
+Historically, finding the perfect configuration requires patience. The traditional tuning process is almost entirely empirical. You tweak a few settings, run the load tests, analyse the output, and repeat the process. Now, imagine reducing this exhaustive process, which usually takes hours or days. This is exactly the revolution that Large Language Models (LLMs) are bringing to the Java ecosystem.
+
+== Bottleneck of the Traditional Approach
+
+Whether you are adjusting heap sizes or choosing between G1 and ZGC, the fundamental problem is the search space.
+
+There are thousands of possible parameter combinations. Tradicional autotunit tools try to solve this with a search algorithm to test dozens of scenarios and measure the output.
+
+Here is an example of the Traditional Approach
+
+| Name                           | TYpe     | Combinations |
+|------------------------------|--------|------------|
+| MaxTenuringThreshold           | int      | 176          |
+| MaxRAMPercentage               | double   | 91           |
+| ParallelGCThreads              | int      | 32           |
+| MaxGCPauseMillis               | int      | 21           |
+| InitiatingHeapOccupancyPercent | int      | 66           |
+| UseTLAB                        | category | 2            |
+| UseNUMA                        | category | 2            |
+| UseCompressedOops              | category | 2            |
+| DisableExplicitGC              | category | 2            |
+| nettyBufferCheck               | category | 2            |
+
+**Unique combinations:** 22.730.932.224
+
+Let's use the *nettyBufferCheck* parameter only as an example: The search algorithms don't know what *nettyBufferCheck* means. Eventually, the search algorithms will come up with the solution that enabling becomes not a good thing for that scenario, but how long will it take? We can apply the same question for each argument.
+
+== Paradigm Shift: AI-Guided Autotuning
+
+The new approach leverages an LLM to forecast the ideal configuration, rather than exhaustively testing numerous configurations. Focusing solely on JVM startup tuning, it runs the application with a given set of parameters and values, captures metrics, and then uses the LLM to interpret the telemetry data and propose new parameters.
+
+1. Baseline Execution: The application runs in the JVM without any parameters.
+
+2. JVM Argument Prediction: Given a predefined set of JVM parameters composed of a name, value range, and a description. The LLM should suggest the next configuration that the system should run.
+
+== Agent Orchestrator
+
+To make this process truly autonomous, the LLM does not just act as a one-shot static suggestion. Instead, it is embedded within an intelligent Agent. This agent acts as an orchestrator, managing a continuous, self-correcting feedback loop. It runs the application, evaluates the performance, and iteratively consults the LLM to refine the JVM arguments until the threshold is achieved.
+
+Here is a conceptual view of how the agent's internal loops operate:
+
+```
++--------------------------------+
+| Start the application without  |
+| any parameters                 |
++--------------------------------+
+          |
+          |
+          v
++--------------------------------+
+| Collect the metric             |
++--------------------------------+
+          |
+          |
+          v
++-------------------------------+       +-------------------------------+
+| From a predefined prompt,     |       |  Threshold is achieved ?      |
+| replace the placeholders with |       |          Stop                |
+| the pre-defined set of possible|       +-------------------------------+
+| JVM for that experiment and    |                      |
+| the metric above               |                      |
++-------------------------------+                       |
+          |                                             |
+          |                                             |
+          v                                             ^
++--------------------------------+                      |
+| Rerun the experiment           |                      |
++--------------------------------+                      |
+          |                                             |
+          +---------------Loop--------------------------+
+```
+
+== Future of Java Performance Engineering
+
+The JVM has always offered incredible power and flexibility, but unlocking its full potential has traditionally required an exhaustive search space by the algorithm. By shifting the burden of JVM tuning from the search space to an LLM-guided agent, we are witnessing a fundamental change in how performance optimization is handled.
+
+The agentic approach proves that we no longer need to rely on search space. By combining dynamic execution, real-time metrics, and the pattern-matching capabilities of an LLM, the optimization loop becomes fully autonomous. The agent iterates, analyzes the actual runtime behavior of the application, and delivers the precise JVM argument needed for that trial.
+
+Ultimately, this does more than just save computation resources and cloud costs. It redefines the developer experience.
